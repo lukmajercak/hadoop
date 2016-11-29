@@ -192,7 +192,8 @@ public class OpportunisticContainerAllocator {
 
   /**
    * Allocate OPPORTUNISTIC containers.
-   * @param request AllocateRequest
+   * @param blackList Resource BlackList Request
+   * @param oppResourceReqs Opportunistic Resource Requests
    * @param applicationAttemptId ApplicationAttemptId
    * @param opportContext App specific OpportunisticContainerContext
    * @param rmIdentifier RM Identifier
@@ -200,32 +201,24 @@ public class OpportunisticContainerAllocator {
    * @return List of Containers.
    * @throws YarnException YarnException
    */
-  public List<Container> allocateContainers(
-      AllocateRequest request, ApplicationAttemptId applicationAttemptId,
+  public List<Container> allocateContainers(ResourceBlacklistRequest blackList,
+      List<ResourceRequest> oppResourceReqs,
+      ApplicationAttemptId applicationAttemptId,
       OpportunisticContainerContext opportContext, long rmIdentifier,
       String appSubmitter) throws YarnException {
-    // Update released containers.
-    List<ContainerId> releasedContainers = request.getReleaseList();
-    int numReleasedContainers = releasedContainers.size();
-    if (numReleasedContainers > 0) {
-      LOG.info("AttemptID: " + applicationAttemptId + " released: "
-          + numReleasedContainers);
-      opportContext.getContainersAllocated().removeAll(releasedContainers);
-    }
 
     // Update black list.
-    ResourceBlacklistRequest rbr = request.getResourceBlacklistRequest();
-    if (rbr != null) {
-      opportContext.getBlacklist().removeAll(rbr.getBlacklistRemovals());
-      opportContext.getBlacklist().addAll(rbr.getBlacklistAdditions());
+    if (blackList != null) {
+      opportContext.getBlacklist().removeAll(blackList.getBlacklistRemovals());
+      opportContext.getBlacklist().addAll(blackList.getBlacklistAdditions());
     }
 
     // Add OPPORTUNISTIC requests to the outstanding ones.
-    opportContext.addToOutstandingReqs(request.getAskList());
+    opportContext.addToOutstandingReqs(oppResourceReqs);
 
     // Satisfy the outstanding OPPORTUNISTIC requests.
     List<Container> allocatedContainers = new ArrayList<>();
-    for (Priority priority :
+    for (SchedulerRequestKey schedulerKey :
         opportContext.getOutstandingOpReqs().descendingKeySet()) {
       // Allocated containers :
       //  Key = Requested Capability,
@@ -234,7 +227,7 @@ public class OpportunisticContainerAllocator {
       //          we need the requested capability (key) to match against
       //          the outstanding reqs)
       Map<Resource, List<Container>> allocated = allocate(rmIdentifier,
-          opportContext, priority, applicationAttemptId, appSubmitter);
+          opportContext, schedulerKey, applicationAttemptId, appSubmitter);
       for (Map.Entry<Resource, List<Container>> e : allocated.entrySet()) {
         opportContext.matchAllocationToOutstandingRequest(
             e.getKey(), e.getValue());
@@ -246,19 +239,22 @@ public class OpportunisticContainerAllocator {
   }
 
   private Map<Resource, List<Container>> allocate(long rmIdentifier,
-      OpportunisticContainerContext appContext, Priority priority,
+      OpportunisticContainerContext appContext, SchedulerRequestKey schedKey,
       ApplicationAttemptId appAttId, String userName) throws YarnException {
     Map<Resource, List<Container>> containers = new HashMap<>();
     for (ResourceRequest anyAsk :
-        appContext.getOutstandingOpReqs().get(priority).values()) {
+        appContext.getOutstandingOpReqs().get(schedKey).values()) {
       allocateContainersInternal(rmIdentifier, appContext.getAppParams(),
           appContext.getContainerIdGenerator(), appContext.getBlacklist(),
           appAttId, appContext.getNodeMap(), userName, containers, anyAsk);
-      LOG.info("Opportunistic allocation requested for ["
-          + "priority=" + anyAsk.getPriority()
-          + ", num_containers=" + anyAsk.getNumContainers()
-          + ", capability=" + anyAsk.getCapability() + "]"
-          + " allocated = " + containers.get(anyAsk.getCapability()).size());
+        if (!containers.isEmpty()) {
+          LOG.info("Opportunistic allocation requested for ["
+              + "priority=" + anyAsk.getPriority()
+              + ", allocationRequestId=" + anyAsk.getAllocationRequestId()
+              + ", num_containers=" + anyAsk.getNumContainers()
+              + ", capability=" + anyAsk.getCapability() + "]"
+              + " allocated = " + containers.get(anyAsk.getCapability()).size());
+        }
     }
     return containers;
   }
