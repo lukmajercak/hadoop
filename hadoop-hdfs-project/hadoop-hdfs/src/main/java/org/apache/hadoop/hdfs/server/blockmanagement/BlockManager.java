@@ -4096,8 +4096,8 @@ public class BlockManager implements BlockStatsMXBean {
     
     namesystem.writeLock();
     try {
-      // blocks should not be replicated or removed if safe mode is on
-      if (namesystem.isInSafeMode()) {
+      // Check with the namesystem whether we can replicate/delete blocks
+      if (!namesystem.allowsBlockReplication()) {
         LOG.debug("In safemode, not computing reconstruction work");
         return 0;
       }
@@ -4395,11 +4395,11 @@ public class BlockManager implements BlockStatsMXBean {
    * @return number of blocks scheduled for replication or removal.
    */
   int computeDatanodeWork() {
-    // Blocks should not be replicated or removed if in safe mode.
+    // Check with the namesystem whether we can replicate/delete blocks
     // It's OK to check safe mode here w/o holding lock, in the worst
     // case extra replications will be scheduled, and these will get
     // fixed up later.
-    if (namesystem.isInSafeMode()) {
+    if (!namesystem.allowsBlockReplication()) {
       return 0;
     }
 

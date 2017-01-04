@@ -30,4 +30,9 @@ public interface SafeMode {
    * safe mode turned on automatically?
    */
   public boolean isInStartupSafeMode();
+
+  /**
+   * Does the system allow block replication/deletion?
+   */
+  public boolean allowsBlockReplication();
 }

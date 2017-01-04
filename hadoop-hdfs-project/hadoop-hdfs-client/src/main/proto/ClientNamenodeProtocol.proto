@@ -366,6 +366,7 @@ enum SafeModeActionProto {
   SAFEMODE_ENTER = 2;
   SAFEMODE_GET = 3;
   SAFEMODE_FORCE_EXIT = 4;
+  SAFEMODE_ENTER_RECOVERY = 5;
 }
 
 message SetSafeModeRequestProto {

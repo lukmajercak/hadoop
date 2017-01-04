@@ -1601,6 +1601,8 @@ public class PBHelperClient {
       return SafeModeActionProto.SAFEMODE_LEAVE;
     case SAFEMODE_ENTER:
       return SafeModeActionProto.SAFEMODE_ENTER;
+    case SAFEMODE_ENTER_RECOVERY:
+      return SafeModeActionProto.SAFEMODE_ENTER_RECOVERY;
     case SAFEMODE_GET:
       return SafeModeActionProto.SAFEMODE_GET;
     case SAFEMODE_FORCE_EXIT:
@@ -2030,6 +2032,8 @@ public class PBHelperClient {
       return SafeModeAction.SAFEMODE_LEAVE;
     case SAFEMODE_ENTER:
       return SafeModeAction.SAFEMODE_ENTER;
+    case SAFEMODE_ENTER_RECOVERY:
+      return SafeModeAction.SAFEMODE_ENTER_RECOVERY;
     case SAFEMODE_GET:
       return SafeModeAction.SAFEMODE_GET;
     case SAFEMODE_FORCE_EXIT:

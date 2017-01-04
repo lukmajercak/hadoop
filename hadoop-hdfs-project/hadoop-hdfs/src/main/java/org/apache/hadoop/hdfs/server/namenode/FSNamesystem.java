@@ -544,6 +544,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   private boolean manualSafeMode = false;
   private boolean resourceLowSafeMode = false;
+  private boolean recoverySafeMode = false;
 
   /**
    * Notify that loading of this FSDirectory is complete, and
@@ -4220,6 +4221,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       case SAFEMODE_ENTER: // enter safe mode
         enterSafeMode(false);
         break;
+      case SAFEMODE_ENTER_RECOVERY:
+        enterSafeMode(false, true);
+        break;
       case SAFEMODE_FORCE_EXIT:
         leaveSafeMode(true);
         break;
@@ -4284,11 +4288,25 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return !isInManualOrResourceLowSafeMode() && blockManager.isInSafeMode();
   }
 
+  @Override
+  public boolean allowsBlockReplication() {
+    return !isInSafeMode() || isInRecoverySafeMode();
+  }
+
   /**
    * Enter safe mode. If resourcesLow is false, then we assume it is manual
    * @throws IOException
    */
-  void enterSafeMode(boolean resourcesLow) throws IOException {
+  void enterSafeMode(boolean resourceLow) throws IOException {
+    enterSafeMode(resourceLow, false);
+  }
+
+  /**
+   * Enter safe mode. If resourcesLow is false, then we assume it is manual
+   * @throws IOException
+   */
+  void enterSafeMode(boolean resourcesLow, boolean recovery)
+    throws IOException {
     writeLock();
     try {
       // Stop the secret manager, since rolling the master key would
@@ -4305,6 +4323,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         getEditLog().logSyncAll();
       }
       setManualAndResourceLowSafeMode(!resourcesLow, resourcesLow);
+      setRecoverySafeMode(recovery);
       NameNode.stateChangeLog.info("STATE* Safe mode is ON.\n" +
           getSafeModeTip());
     } finally {
@@ -4325,6 +4344,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
       if (blockManager.leaveSafeMode(force)) {
         setManualAndResourceLowSafeMode(false, false);
+        setRecoverySafeMode(false);
         startSecretManagerIfNecessary();
       }
     } finally {
@@ -4355,10 +4375,21 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return manualSafeMode || resourceLowSafeMode;
   }
 
+  /**
+   * @return true iff it is in recovery safe mode
+   */
+  private synchronized boolean isInRecoverySafeMode() {
+    return recoverySafeMode;
+  }
+
   private synchronized void setManualAndResourceLowSafeMode(boolean manual,
       boolean resourceLow) {
     this.manualSafeMode = manual;
     this.resourceLowSafeMode = resourceLow;
+  }
+
+  private synchronized void setRecoverySafeMode(boolean recovery) {
+    this.recoverySafeMode = recovery;
   }
 
   CheckpointSignature rollEditLog() throws IOException {

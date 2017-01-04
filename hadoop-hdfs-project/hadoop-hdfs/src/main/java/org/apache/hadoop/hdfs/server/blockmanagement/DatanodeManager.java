@@ -1586,9 +1586,9 @@ public class DatanodeManager {
     heartbeatManager.updateHeartbeat(nodeinfo, reports, cacheCapacity,
         cacheUsed, xceiverCount, failedVolumes, volumeFailureSummary);
 
-    // If we are in safemode, do not send back any recovery / replication
-    // requests. Don't even drain the existing queue of work.
-    if (namesystem.isInSafeMode()) {
+    // Check with the namesystem whether block
+    // replication/deletion work is allowed.
+    if(!namesystem.allowsBlockReplication()) {
       return new DatanodeCommand[0];
     }
 
