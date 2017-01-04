@@ -4297,8 +4297,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * Enter safe mode. If resourcesLow is false, then we assume it is manual
    * @throws IOException
    */
-  void enterSafeMode(boolean resourceLow) throws IOException {
-    enterSafeMode(resourceLow, false);
+  void enterSafeMode(boolean resourcesLow) throws IOException {
+    enterSafeMode(resourcesLow, false);
   }
 
   /**
