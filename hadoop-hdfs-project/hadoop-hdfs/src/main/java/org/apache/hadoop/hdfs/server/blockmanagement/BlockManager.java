@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY;
 import static org.apache.hadoop.hdfs.protocol.BlockType.CONTIGUOUS;
 import static org.apache.hadoop.hdfs.protocol.BlockType.STRIPED;
 import static org.apache.hadoop.util.ExitUtil.terminate;
@@ -343,6 +345,9 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   final PendingReconstructionBlocks pendingReconstruction;
 
+  /** Stores information about block recovery attempts. */
+  private final PendingRecoveryBlocks pendingRecoveryBlocks;
+
   /** The maximum number of replicas allowed for a block */
   public final short maxReplication;
   /**
@@ -538,6 +543,16 @@ public class BlockManager implements BlockStatsMXBean {
           + " = " + defaultReplication);
     }
     this.minReplicationToBeInMaintenance = (short)minMaintenanceR;
+
+    long heartbeatIntervalSecs = conf.getTimeDuration(
+        DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
+        DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT, TimeUnit.SECONDS);
+    int timeoutMultiplier = conf.getInt(
+        DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY,
+        DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_DEFAULT
+    );
+    pendingRecoveryBlocks = new PendingRecoveryBlocks(
+        TimeUnit.SECONDS.toMillis(heartbeatIntervalSecs * timeoutMultiplier));
 
     this.blockReportLeaseManager = new BlockReportLeaseManager(conf);
 
@@ -4703,6 +4718,25 @@ public class BlockManager implements BlockStatsMXBean {
       Thread.currentThread().interrupt();
       throw new IOException(ie);
     }
+  }
+
+  /**
+   * Notification of a successful block recovery.
+   * @param block for which the recovery succeeded
+   */
+  public void successfulBlockRecovery(BlockInfo block) {
+    pendingRecoveryBlocks.remove(block);
+  }
+
+  /**
+   * Checks whether a recovery attempt has been made for the given block.
+   * If so, checks whether that attempt has timed out.
+   * @param b block for which recovery is being attempted
+   * @return true if no recovery attempt has been made or
+   *         the previous attempt timed out
+   */
+  public boolean addBlockRecoveryAttempt(BlockInfo b) {
+    return pendingRecoveryBlocks.add(b);
   }
 
   @VisibleForTesting

@@ -278,7 +278,10 @@ public class TestPipelinesFailover {
     // Disable permissions so that another user can recover the lease.
     conf.setBoolean(DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY, false);
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
-    
+    // Decrease block recovery timeout to retry recovery after failover
+    conf.setInt(
+        DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY, 1);
+
     FSDataOutputStream stm = null;
     final MiniDFSCluster cluster = newMiniCluster(conf, 3);
     try {
