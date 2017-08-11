@@ -197,7 +197,7 @@ public class TestDataTransferKeepalive {
       public Boolean get() {
         // DN should time out in sendChunks, and this should force
         // the xceiver to exit.
-        return getXceiverCountWithoutServer() == 0;
+        return dn.getXceiverCount() == 0;
       }
     }, 500, 50000);
 
@@ -244,21 +244,11 @@ public class TestDataTransferKeepalive {
   }
 
   private void assertXceiverCount(int expected) {
-    int count = getXceiverCountWithoutServer();
+    int count = dn.getXceiverCount();
     if (count != expected) {
       ReflectionUtils.printThreadInfo(System.err, "Thread dumps");
       fail("Expected " + expected + " xceivers, found " +
           count);
     }
-  }
-
-  /**
-   * Returns the datanode's xceiver count, but subtracts 1, since the
-   * DataXceiverServer counts as one.
-   * 
-   * @return int xceiver count, not including DataXceiverServer
-   */
-  private int getXceiverCountWithoutServer() {
-    return dn.getXceiverCount() - 1;
   }
 }

@@ -484,6 +484,10 @@ public class DataNodeMetrics {
     dataNodeActiveXceiversCount.decr();
   }
 
+  public int getDataNodeActiveXceiversCount() {
+    return dataNodeActiveXceiversCount.value();
+  }
+
   public void setDataNodeActiveXceiversCount(int value) {
     dataNodeActiveXceiversCount.set(value);
   }

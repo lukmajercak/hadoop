@@ -2163,7 +2163,7 @@ public class DataNode extends ReconfigurableBase
   /** Number of concurrent xceivers per node. */
   @Override // DataNodeMXBean
   public int getXceiverCount() {
-    return threadGroup == null ? 0 : threadGroup.activeCount();
+    return metrics == null ? 0 : metrics.getDataNodeActiveXceiversCount();
   }
 
   @Override // DataNodeMXBean
