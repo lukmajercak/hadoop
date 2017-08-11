@@ -4225,6 +4225,15 @@
   </property>
 
 <property>
+  <name>dfs.namenode.block.recovery.timeout.multiplier</name>
+  <value>60</value>
+  <description>
+    Used to determine timeout for block recovery work by
+    multiplying the heartbeat interval.
+  </description>
+</property>
+
+<property>
   <name>dfs.pipeline.ecn</name>
   <value>false</value>
   <description>

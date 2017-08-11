@@ -1081,13 +1081,15 @@ public class TestBlockRecovery {
 
   private void testRecoveryWithDatanodeDelayed(
       GenericTestUtils.SleepAnswer recoveryDelayer) throws Exception {
-    Configuration conf = new HdfsConfiguration();
-    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1);
-    conf.setInt(DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY, 10);
+    Configuration configuration = new HdfsConfiguration();
+    configuration.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1);
+    configuration.setInt(DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY,
+        10);
     MiniDFSCluster cluster = null;
 
     try {
-      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+      cluster = new MiniDFSCluster.Builder(configuration)
+          .numDataNodes(2).build();
       cluster.waitActive();
       final FSNamesystem ns = cluster.getNamesystem();
       final NameNode nn = cluster.getNameNode();

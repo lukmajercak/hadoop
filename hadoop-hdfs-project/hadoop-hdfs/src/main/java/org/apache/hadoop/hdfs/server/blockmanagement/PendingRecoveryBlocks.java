@@ -83,7 +83,7 @@ class PendingRecoveryBlocks {
   }
 
   /**
-   * Check whether the given block is under recovery
+   * Check whether the given block is under recovery.
    * @param b block for which to check
    * @return true if the given block is being recovered
    */
@@ -117,8 +117,8 @@ class PendingRecoveryBlocks {
       return currentTime > timeoutAt;
     }
 
-    void setTimeout(long timeoutAt) {
-      this.timeoutAt = timeoutAt;
+    void setTimeout(long newTimeoutAt) {
+      this.timeoutAt = newTimeoutAt;
     }
 
     @Override
