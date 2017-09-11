@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -48,7 +49,7 @@ public class DFSClientFaultInjector {
     return false;
   }
 
-  public boolean failPacket() {
+  public boolean failPacket(boolean isLastPacket) {
     return false;
   }
 
@@ -63,4 +64,6 @@ public class DFSClientFaultInjector {
   }
 
   public void sleepBeforeHedgedGet() {}
+
+  public void pipelineAckFromDatanodeDelay() throws IOException {}
 }

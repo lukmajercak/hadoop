@@ -1177,8 +1177,7 @@ class DataStreamer extends Daemon {
 
           // Fail the packet write for testing in order to force a
           // pipeline recovery.
-          if (DFSClientFaultInjector.get().failPacket() &&
-              isLastPacketInBlock) {
+          if (DFSClientFaultInjector.get().failPacket(isLastPacketInBlock)) {
             failPacket = true;
             throw new IOException(
                 "Failing the last packet for testing.");
@@ -1360,10 +1359,6 @@ class DataStreamer extends Daemon {
     if (!isAppend && lastAckedSeqno < 0
         && stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) {
       //no data have been written
-      return;
-    } else if (stage == BlockConstructionStage.PIPELINE_CLOSE
-        || stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
-      //pipeline is closing
       return;
     }
 
@@ -1746,6 +1741,7 @@ class DataStreamer extends Daemon {
             nodeStorageIDs[0], nodeStorageIDs);
 
         // receive ack for connect
+        DFSClientFaultInjector.get().pipelineAckFromDatanodeDelay();
         BlockOpResponseProto resp = BlockOpResponseProto.parseFrom(
             PBHelperClient.vintPrefixed(blockReplyStream));
         Status pipelineStatus = resp.getStatus();

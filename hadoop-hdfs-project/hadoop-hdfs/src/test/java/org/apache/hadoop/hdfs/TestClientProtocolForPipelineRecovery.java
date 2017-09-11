@@ -17,15 +17,19 @@
  */
 package org.apache.hadoop.hdfs;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Supplier;
 
@@ -163,7 +167,7 @@ public class TestClientProtocolForPipelineRecovery {
       FileSystem fileSys = cluster.getFileSystem();
 
       Path file = new Path("dataprotocol1.dat");
-      Mockito.when(faultInjector.failPacket()).thenReturn(true);
+      Mockito.when(faultInjector.failPacket(true)).thenReturn(true);
       DFSTestUtil.createFile(fileSys, file, 68000000L, (short)numDataNodes, 0L);
 
       // At this point, NN should have accepted only valid replicas.
@@ -748,6 +752,61 @@ public class TestClientProtocolForPipelineRecovery {
       dfsO.getStreamer()
           .updatePipeline(newBlock.getBlock().getGenerationStamp());
     } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  /**
+   * Reproduces an issue where we:
+   * 1. Create a file with replicationFactor = 4, minReplicas = 2
+   * 2. Fail waiting for the last packet, followed by 2 exceptions when
+   *    recovering the leftover pipeline
+   * 3. The leftover pipeline will only have one DN and NN will never
+   *    close such block, resulting in failure to write
+   */
+  @Test(timeout=200000L)
+  public void testPipelineRecoveryLastPacketFailed() throws Exception {
+    long blockSize = 3 * 1024 * 1024;
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFS_NAMENODE_REPLICATION_MIN_KEY, 2);
+    conf.setLong(DFS_BLOCK_SIZE_KEY, blockSize);
+
+    final AtomicInteger throwExc = new AtomicInteger(2);
+    final AtomicBoolean failedLastPacket = new AtomicBoolean(false);
+
+    DFSClientFaultInjector faultInjector = new DFSClientFaultInjector() {
+      @Override
+      public void pipelineAckFromDatanodeDelay() throws IOException {
+        if (failedLastPacket.get() && throwExc.get() > 0) {
+          throwExc.decrementAndGet();
+          throw new SocketTimeoutException();
+        }
+      }
+
+      @Override
+      public boolean failPacket(boolean isLastPacket) {
+        if (!isLastPacket) {
+          return false;
+        }
+        return !failedLastPacket.getAndSet(true);
+      }
+    };
+
+    DFSClientFaultInjector oldInjector = DFSClientFaultInjector.get();
+    DFSClientFaultInjector.set(faultInjector);
+
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(7).build();
+    try {
+      cluster.waitActive();
+      FileSystem fileSys = cluster.getFileSystem();
+
+      Path file = new Path("dataprotocol5.dat");
+      DFSTestUtil.createFile(fileSys, file, blockSize, (short)4, 0L);
+    } finally {
+      DFSClientFaultInjector.set(oldInjector);
       if (cluster != null) {
         cluster.shutdown();
       }
