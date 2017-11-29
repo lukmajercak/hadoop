@@ -55,10 +55,11 @@ import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSUtilClient;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.inotify.Event;
 import org.apache.hadoop.hdfs.inotify.EventBatch;
 import org.apache.hadoop.hdfs.inotify.EventBatchList;
-import org.apache.hadoop.hdfs.protocol.AddECPolicyResponse;
+import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.BlockType;
@@ -79,16 +80,18 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyState;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.FsPermissionExtension;
-import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.ReencryptAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
+import org.apache.hadoop.hdfs.protocol.HdfsPathHandle;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
@@ -137,7 +140,7 @@ import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.ReencryptionS
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.ZoneReencryptionStatusProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.AccessModeProto;
-import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.AddECPolicyResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.AddErasureCodingPolicyResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.BlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.BlockStoragePolicyProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.BlockTypeProto;
@@ -159,6 +162,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.ErasureCodingPolicyProto
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.FsServerDefaultsProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.HdfsFileStatusProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.HdfsFileStatusProto.FileType;
+import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.HdfsPathHandleProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.LocatedBlockProto;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.LocatedBlockProto.Builder;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.LocatedBlocksProto;
@@ -1561,6 +1565,19 @@ public class PBHelperClient {
     return FsPermissionProto.newBuilder().setPerm(p.toShort()).build();
   }
 
+  public static HdfsPathHandle convert(HdfsPathHandleProto fd) {
+    if (null == fd) {
+      return null;
+    }
+    return new HdfsPathHandle(fd.getInodeId());
+  }
+
+  public static HdfsPathHandleProto convert(HdfsPathHandle fd) {
+    return HdfsPathHandleProto.newBuilder()
+        .setInodeId(fd.getInodeId())
+        .build();
+  }
+
   public static HdfsFileStatus convert(HdfsFileStatusProto fs) {
     if (fs == null) {
       return null;
@@ -1601,6 +1618,9 @@ public class PBHelperClient {
           break;
         case HAS_EC:
           f.add(HdfsFileStatus.Flags.HAS_EC);
+          break;
+        case SNAPSHOT_ENABLED:
+          f.add(HdfsFileStatus.Flags.SNAPSHOT_ENABLED);
           break;
         default:
           // ignore unknown
@@ -2155,6 +2175,8 @@ public class PBHelperClient {
     int flags = fs.hasAcl()   ? HdfsFileStatusProto.Flags.HAS_ACL_VALUE   : 0;
     flags |= fs.isEncrypted() ? HdfsFileStatusProto.Flags.HAS_CRYPT_VALUE : 0;
     flags |= fs.isErasureCoded() ? HdfsFileStatusProto.Flags.HAS_EC_VALUE : 0;
+    flags |= fs.isSnapshotEnabled() ? HdfsFileStatusProto.Flags
+        .SNAPSHOT_ENABLED_VALUE : 0;
     builder.setFlags(flags);
     return builder.build();
   }
@@ -2936,6 +2958,9 @@ public class PBHelperClient {
     return HdfsProtos.ErasureCodingPolicyState.valueOf(state.getValue());
   }
 
+  /**
+   * Convert the protobuf to a {@link ErasureCodingPolicy}.
+   */
   public static ErasureCodingPolicy convertErasureCodingPolicy(
       ErasureCodingPolicyProto proto) {
     final byte id = (byte) (proto.getId() & 0xFF);
@@ -2949,28 +2974,62 @@ public class PBHelperClient {
           "Missing schema field in ErasureCodingPolicy proto");
       Preconditions.checkArgument(proto.hasCellSize(),
           "Missing cellsize field in ErasureCodingPolicy proto");
-      Preconditions.checkArgument(proto.hasState(),
-          "Missing state field in ErasureCodingPolicy proto");
 
       return new ErasureCodingPolicy(proto.getName(),
           convertECSchema(proto.getSchema()),
-          proto.getCellSize(), id, convertECState(proto.getState()));
+          proto.getCellSize(), id);
     }
     return policy;
   }
 
-  public static ErasureCodingPolicyProto convertErasureCodingPolicy(
+  /**
+   * Convert the protobuf to a {@link ErasureCodingPolicyInfo}. This should only
+   * be needed when the caller is interested in the state of the policy.
+   */
+  public static ErasureCodingPolicyInfo convertErasureCodingPolicyInfo(
+      ErasureCodingPolicyProto proto) {
+    ErasureCodingPolicy policy = convertErasureCodingPolicy(proto);
+    ErasureCodingPolicyInfo info = new ErasureCodingPolicyInfo(policy);
+    Preconditions.checkArgument(proto.hasState(),
+        "Missing state field in ErasureCodingPolicy proto");
+    info.setState(convertECState(proto.getState()));
+    return info;
+  }
+
+  private static ErasureCodingPolicyProto.Builder createECPolicyProtoBuilder(
       ErasureCodingPolicy policy) {
-    ErasureCodingPolicyProto.Builder builder = ErasureCodingPolicyProto
-        .newBuilder()
-        .setId(policy.getId());
+    final ErasureCodingPolicyProto.Builder builder =
+        ErasureCodingPolicyProto.newBuilder().setId(policy.getId());
     // If it's not a built-in policy, need to set the optional fields.
     if (SystemErasureCodingPolicies.getByID(policy.getId()) == null) {
       builder.setName(policy.getName())
           .setSchema(convertECSchema(policy.getSchema()))
-          .setCellSize(policy.getCellSize())
-          .setState(convertECState(policy.getState()));
+          .setCellSize(policy.getCellSize());
     }
+    return builder;
+  }
+
+  /**
+   * Convert a {@link ErasureCodingPolicy} to protobuf.
+   * This means no state of the policy will be set on the protobuf.
+   */
+  public static ErasureCodingPolicyProto convertErasureCodingPolicy(
+      ErasureCodingPolicy policy) {
+    return createECPolicyProtoBuilder(policy).build();
+  }
+
+  /**
+   * Convert a {@link ErasureCodingPolicyInfo} to protobuf.
+   * The protobuf will have the policy, and state. State is relevant when:
+   * 1. Persisting a policy to fsimage
+   * 2. Returning the policy to the RPC call
+   * {@link DistributedFileSystem#getAllErasureCodingPolicies()}
+   */
+  public static ErasureCodingPolicyProto convertErasureCodingPolicy(
+      ErasureCodingPolicyInfo info) {
+    final ErasureCodingPolicyProto.Builder builder =
+        createECPolicyProtoBuilder(info.getPolicy());
+    builder.setState(convertECState(info.getState()));
     return builder.build();
   }
 
@@ -2981,10 +3040,11 @@ public class PBHelperClient {
     return builder.build();
   }
 
-  public static AddECPolicyResponseProto convertAddECPolicyResponse(
-      AddECPolicyResponse response) {
-    AddECPolicyResponseProto.Builder builder =
-        AddECPolicyResponseProto.newBuilder()
+  public static AddErasureCodingPolicyResponseProto
+      convertAddErasureCodingPolicyResponse(
+          AddErasureCodingPolicyResponse response) {
+    AddErasureCodingPolicyResponseProto.Builder builder =
+        AddErasureCodingPolicyResponseProto.newBuilder()
         .setPolicy(convertErasureCodingPolicy(response.getPolicy()))
         .setSucceed(response.isSucceed());
     if (!response.isSucceed()) {
@@ -2993,13 +3053,14 @@ public class PBHelperClient {
     return builder.build();
   }
 
-  public static AddECPolicyResponse convertAddECPolicyResponse(
-      AddECPolicyResponseProto proto) {
+  public static AddErasureCodingPolicyResponse
+      convertAddErasureCodingPolicyResponse(
+          AddErasureCodingPolicyResponseProto proto) {
     ErasureCodingPolicy policy = convertErasureCodingPolicy(proto.getPolicy());
     if (proto.getSucceed()) {
-      return new AddECPolicyResponse(policy);
+      return new AddErasureCodingPolicyResponse(policy);
     } else {
-      return new AddECPolicyResponse(policy, proto.getErrorMsg());
+      return new AddErasureCodingPolicyResponse(policy, proto.getErrorMsg());
     }
   }
 

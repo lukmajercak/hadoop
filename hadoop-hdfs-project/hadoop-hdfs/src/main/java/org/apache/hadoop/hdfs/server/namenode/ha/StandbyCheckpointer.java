@@ -121,7 +121,7 @@ public class StandbyCheckpointer {
   
   private URL getHttpAddress(Configuration conf) throws IOException {
     final String scheme = DFSUtil.getHttpClientScheme(conf);
-    String defaultHost = NameNode.getServiceAddress(conf).getHostName();
+    String defaultHost = NameNode.getServiceAddress(conf, true).getHostName();
     URI addr = DFSUtil.getInfoServerWithDefaultHost(defaultHost, conf, scheme);
     return addr.toURL();
   }
@@ -439,6 +439,7 @@ public class StandbyCheckpointer {
               namesystem.setNeedRollbackFsImage(false);
             }
             lastCheckpointTime = now;
+            LOG.info("Checkpoint finished successfully.");
           }
         } catch (SaveNamespaceCancelledException ce) {
           LOG.info("Checkpoint was cancelled: " + ce.getMessage());

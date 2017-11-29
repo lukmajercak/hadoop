@@ -60,7 +60,7 @@ import org.mockito.Mockito;
 @RunWith(Parameterized.class)
 public class TestEditLogTailer {
   static {
-    GenericTestUtils.setLogLevel(FSEditLog.LOG, Level.ALL);
+    GenericTestUtils.setLogLevel(FSEditLog.LOG, org.slf4j.event.Level.DEBUG);
   }
 
   @Parameters
@@ -82,9 +82,9 @@ public class TestEditLogTailer {
   static final long NN_LAG_TIMEOUT = 10 * 1000;
   
   static {
-    GenericTestUtils.setLogLevel(FSImage.LOG, Level.ALL);
-    GenericTestUtils.setLogLevel(FSEditLog.LOG, Level.ALL);
-    GenericTestUtils.setLogLevel(EditLogTailer.LOG, Level.ALL);
+    GenericTestUtils.setLogLevel(FSImage.LOG, Level.DEBUG);
+    GenericTestUtils.setLogLevel(FSEditLog.LOG, org.slf4j.event.Level.DEBUG);
+    GenericTestUtils.setLogLevel(EditLogTailer.LOG, Level.DEBUG);
   }
 
   private static Configuration getConf() {
@@ -171,18 +171,15 @@ public class TestEditLogTailer {
     for (int i = 0; i < 5; i++) {
       try {
         // Have to specify IPC ports so the NNs can talk to each other.
-        int[] ports = ServerSocketUtil.getPorts(6);
+        int[] ports = ServerSocketUtil.getPorts(3);
         MiniDFSNNTopology topology = new MiniDFSNNTopology()
             .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
                 .addNN(new MiniDFSNNTopology.NNConf("nn1")
-                    .setIpcPort(ports[0])
-                    .setServicePort(ports[1]))
+                    .setIpcPort(ports[0]))
                 .addNN(new MiniDFSNNTopology.NNConf("nn2")
-                    .setIpcPort(ports[2])
-                    .setServicePort(ports[3]))
+                    .setIpcPort(ports[1]))
                 .addNN(new MiniDFSNNTopology.NNConf("nn3")
-                    .setIpcPort(ports[4])
-                    .setServicePort(ports[5])));
+                    .setIpcPort(ports[2])));
 
         cluster = new MiniDFSCluster.Builder(conf)
           .nnTopology(topology)
@@ -222,14 +219,11 @@ public class TestEditLogTailer {
     MiniDFSNNTopology topology = new MiniDFSNNTopology()
         .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
             .addNN(new MiniDFSNNTopology.NNConf("nn1")
-                .setIpcPort(ServerSocketUtil.getPort(0, 100))
-                .setServicePort(ServerSocketUtil.getPort(0, 100)))
+                .setIpcPort(ServerSocketUtil.getPort(0, 100)))
             .addNN(new MiniDFSNNTopology.NNConf("nn2")
-                .setIpcPort(ServerSocketUtil.getPort(0, 100))
-                .setServicePort(ServerSocketUtil.getPort(0, 100)))
+                .setIpcPort(ServerSocketUtil.getPort(0, 100)))
             .addNN(new MiniDFSNNTopology.NNConf("nn3")
-                .setIpcPort(ServerSocketUtil.getPort(0, 100))
-                .setServicePort(ServerSocketUtil.getPort(0, 100))));
+                .setIpcPort(ServerSocketUtil.getPort(0, 100))));
 
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
         .nnTopology(topology)

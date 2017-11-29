@@ -77,6 +77,8 @@ public class TestConfiguration {
   private Configuration conf;
   final static String CONFIG = new File("./test-config-TestConfiguration.xml").getAbsolutePath();
   final static String CONFIG2 = new File("./test-config2-TestConfiguration.xml").getAbsolutePath();
+  final static String CONFIG_CORE = new File("./core-site.xml")
+      .getAbsolutePath();
   final static String CONFIG_FOR_ENUM = new File("./test-config-enum-TestConfiguration.xml").getAbsolutePath();
   final static String CONFIG_FOR_URI = "file://"
       + new File("./test-config-uri-TestConfiguration.xml").getAbsolutePath();
@@ -114,6 +116,7 @@ public class TestConfiguration {
     new File(new URI(CONFIG_FOR_URI)).delete();
     new File(CONFIG_MULTI_BYTE).delete();
     new File(CONFIG_MULTI_BYTE_SAVED).delete();
+    new File(CONFIG_CORE).delete();
   }
 
   private void startConfig() throws IOException{
@@ -2239,6 +2242,21 @@ public class TestConfiguration {
     FileUtil.fullyDelete(tmpDir);
   }
 
+  public void testGettingPropertiesWithPrefix() throws Exception {
+    Configuration conf = new Configuration();
+    for (int i = 0; i < 10; i++) {
+      conf.set("prefix" + ".name" + i, "value");
+    }
+    conf.set("different.prefix" + ".name", "value");
+    Map<String, String> props = conf.getPropsWithPrefix("prefix");
+    assertEquals(props.size(), 10);
+
+    // test call with no properties for a given prefix
+    props = conf.getPropsWithPrefix("none");
+    assertNotNull(props.isEmpty());
+    assertTrue(props.isEmpty());
+  }
+
   public static void main(String[] argv) throws Exception {
     junit.textui.TestRunner.main(new String[]{
       TestConfiguration.class.getName()
@@ -2248,14 +2266,14 @@ public class TestConfiguration {
   @Test
   public void testGetAllPropertiesByTags() throws Exception {
 
-    out = new BufferedWriter(new FileWriter(CONFIG));
+    out = new BufferedWriter(new FileWriter(CONFIG_CORE));
     startConfig();
     appendPropertyByTag("dfs.cblock.trace.io", "false", "DEBUG");
     appendPropertyByTag("dfs.replication", "1", "PERFORMANCE,REQUIRED");
     appendPropertyByTag("dfs.namenode.logging.level", "INFO", "CLIENT,DEBUG");
     endConfig();
 
-    Path fileResource = new Path(CONFIG);
+    Path fileResource = new Path(CONFIG_CORE);
     conf.addResource(fileResource);
     conf.getProps();
 
@@ -2266,6 +2284,10 @@ public class TestConfiguration {
     tagList.add(CorePropertyTag.CLIENT);
 
     Properties properties = conf.getAllPropertiesByTags(tagList);
+    String[] sources = conf.getPropertySources("dfs.replication");
+    assertTrue(sources.length == 1);
+    assertTrue(Arrays.toString(sources).contains("core-site.xml"));
+
     assertEq(3, properties.size());
     assertEq(true, properties.containsKey("dfs.namenode.logging.level"));
     assertEq(true, properties.containsKey("dfs.replication"));

@@ -78,6 +78,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStoreFactor
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.Recoverable;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.AbstractReservationSystem;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystem;
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceProfilesManager;
+import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceProfilesManagerImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
@@ -124,7 +126,9 @@ import java.nio.charset.Charset;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -225,11 +229,25 @@ public class ResourceManager extends CompositeService implements Recoverable {
     return rmDispatcher;
   }
 
+  @VisibleForTesting
+  protected ResourceProfilesManager createResourceProfileManager() {
+    ResourceProfilesManager resourceProfilesManager =
+        new ResourceProfilesManagerImpl();
+    return resourceProfilesManager;
+  }
+
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
     this.conf = conf;
     this.rmContext = new RMContextImpl();
     rmContext.setResourceManager(this);
+
+
+    // add resource profiles here because it's used by AbstractYarnScheduler
+    ResourceProfilesManager resourceProfilesManager =
+        createResourceProfileManager();
+    resourceProfilesManager.init(conf);
+    rmContext.setResourceProfilesManager(resourceProfilesManager);
 
     this.configurationProvider =
         ConfigurationProviderFactory.getConfigurationProvider(conf);
@@ -351,13 +369,13 @@ public class ResourceManager extends CompositeService implements Recoverable {
   }
 
   /**
-   * Create and ZooKeeper Curator manager.
+   * Get ZooKeeper Curator manager, creating and starting if not exists.
    * @param config Configuration for the ZooKeeper curator.
-   * @return New ZooKeeper Curator manager.
+   * @return ZooKeeper Curator manager.
    * @throws IOException If it cannot create the manager.
    */
-  public ZKCuratorManager createAndStartZKManager(Configuration config)
-      throws IOException {
+  public ZKCuratorManager createAndStartZKManager(Configuration
+      config) throws IOException {
     ZKCuratorManager manager = new ZKCuratorManager(config);
 
     // Get authentication
@@ -380,12 +398,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
     return manager;
   }
 
-  /**
-   * Get the ZooKeeper Curator manager.
-   * @return ZooKeeper Curator manager.
-   */
   public ZKCuratorManager getZKManager() {
-    return this.zkManager;
+    return zkManager;
   }
 
   public CuratorFramework getCurator() {
@@ -1050,7 +1064,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   }
 
   protected void startWepApp() {
-
+    Map<String, String> serviceConfig = null;
     Configuration conf = getConfig();
 
     RMWebAppUtil.setupSecurityAndFilters(conf,
@@ -1068,7 +1082,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
             .withCSRFProtection(YarnConfiguration.RM_CSRF_PREFIX)
             .withXFSProtection(YarnConfiguration.RM_XFS_PREFIX)
             .at(webAppAddress);
-    String proxyHostAndPort = WebAppUtils.getProxyHostAndPort(conf);
+    String proxyHostAndPort = rmContext.getProxyHostAndPort(conf);
     if(WebAppUtils.getResolvedRMWebAppURLWithoutScheme(conf).
         equals(proxyHostAndPort)) {
       if (HAUtil.isHAEnabled(conf)) {
@@ -1116,7 +1130,15 @@ public class ResourceManager extends CompositeService implements Recoverable {
       }
     }
 
-    webApp = builder.start(new RMWebApp(this), uiWebAppContext);
+    if (getConfig().getBoolean(YarnConfiguration.YARN_API_SERVICES_ENABLE,
+        false)) {
+      serviceConfig = new HashMap<String, String>();
+      String apiPackages = "org.apache.hadoop.yarn.service.webapp;" +
+          "org.apache.hadoop.yarn.webapp";
+      serviceConfig.put("PackageName", apiPackages);
+      serviceConfig.put("PathSpec", "/app/*");
+    }
+    webApp = builder.start(new RMWebApp(this), uiWebAppContext, serviceConfig);
   }
 
   private String getWebAppsPath(String appName) {

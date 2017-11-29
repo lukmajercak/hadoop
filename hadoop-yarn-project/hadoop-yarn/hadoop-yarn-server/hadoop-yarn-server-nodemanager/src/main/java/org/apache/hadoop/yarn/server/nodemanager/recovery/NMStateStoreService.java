@@ -42,7 +42,9 @@ import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.Containe
 import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.DeletionServiceDeleteTaskProto;
 import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.LocalizedResourceProto;
 import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.LogDeleterProto;
+import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ResourceMappings;
 
 @Private
@@ -73,7 +75,8 @@ public abstract class NMStateStoreService extends AbstractService {
     REQUESTED,
     QUEUED,
     LAUNCHED,
-    COMPLETED
+    COMPLETED,
+    PAUSED
   }
 
   public static class RecoveredContainerState {
@@ -349,9 +352,9 @@ public abstract class NMStateStoreService extends AbstractService {
   }
 
   /**
-   * Load the state of applications
-   * @return recovered state for applications
-   * @throws IOException
+   * Load the state of applications.
+   * @return recovered state for applications.
+   * @throws IOException IO Exception.
    */
   public abstract RecoveredApplicationsState loadApplicationsState()
       throws IOException;
@@ -403,6 +406,23 @@ public abstract class NMStateStoreService extends AbstractService {
       throws IOException;
 
   /**
+   * Record that a container has been paused at the NM.
+   * @param containerId the container ID.
+   * @throws IOException IO Exception.
+   */
+  public abstract void storeContainerPaused(ContainerId containerId)
+      throws IOException;
+
+  /**
+   * Record that a container has been resumed at the NM by removing the
+   * fact that it has be paused.
+   * @param containerId the container ID.
+   * @throws IOException IO Exception.
+   */
+  public abstract void removeContainerPaused(ContainerId containerId)
+      throws IOException;
+
+  /**
    * Record that a container has been launched
    * @param containerId the container ID
    * @throws IOException
@@ -411,14 +431,13 @@ public abstract class NMStateStoreService extends AbstractService {
       throws IOException;
 
   /**
-   * Record that a container resource has been changed
+   * Record that a container has been updated
    * @param containerId the container ID
-   * @param containerVersion the container version
-   * @param capability the container resource capability
+   * @param containerTokenIdentifier container token identifier
    * @throws IOException
    */
-  public abstract void storeContainerResourceChanged(ContainerId containerId,
-      int containerVersion, Resource capability) throws IOException;
+  public abstract void storeContainerUpdateToken(ContainerId containerId,
+      ContainerTokenIdentifier containerTokenIdentifier) throws IOException;
 
   /**
    * Record that a container has completed
@@ -713,12 +732,12 @@ public abstract class NMStateStoreService extends AbstractService {
   /**
    * Store the assigned resources to a container.
    *
-   * @param containerId Container Id
+   * @param container NMContainer
    * @param resourceType Resource Type
    * @param assignedResources Assigned resources
    * @throws IOException if fails
    */
-  public abstract void storeAssignedResources(ContainerId containerId,
+  public abstract void storeAssignedResources(Container container,
       String resourceType, List<Serializable> assignedResources)
       throws IOException;
 
@@ -727,4 +746,14 @@ public abstract class NMStateStoreService extends AbstractService {
   protected abstract void startStorage() throws IOException;
 
   protected abstract void closeStorage() throws IOException;
+
+  protected void updateContainerResourceMapping(Container container,
+      String resourceType, List<Serializable> assignedResources) {
+    // Update Container#getResourceMapping.
+    ResourceMappings.AssignedResources newAssigned =
+        new ResourceMappings.AssignedResources();
+    newAssigned.updateAssignedResources(assignedResources);
+    container.getResourceMappings().addAssignedResources(resourceType,
+        newAssigned);
+  }
 }

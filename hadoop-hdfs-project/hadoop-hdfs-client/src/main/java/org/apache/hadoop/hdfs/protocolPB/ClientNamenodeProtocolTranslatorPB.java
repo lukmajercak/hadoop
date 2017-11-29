@@ -50,7 +50,7 @@ import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.hdfs.inotify.EventBatchList;
-import org.apache.hadoop.hdfs.protocol.AddECPolicyResponse;
+import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -64,6 +64,7 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.ReencryptAction;
@@ -1718,7 +1719,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public AddECPolicyResponse[] addErasureCodingPolicies(
+  public AddErasureCodingPolicyResponse[] addErasureCodingPolicies(
       ErasureCodingPolicy[] policies) throws IOException {
     List<ErasureCodingPolicyProto> protos = Arrays.stream(policies)
         .map(PBHelperClient::convertErasureCodingPolicy)
@@ -1729,9 +1730,10 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       AddErasureCodingPoliciesResponseProto rep = rpcProxy
           .addErasureCodingPolicies(null, req);
-      AddECPolicyResponse[] responses = rep.getResponsesList().stream()
-          .map(PBHelperClient::convertAddECPolicyResponse)
-          .toArray(AddECPolicyResponse[]::new);
+      AddErasureCodingPolicyResponse[] responses =
+          rep.getResponsesList().stream()
+              .map(PBHelperClient::convertAddErasureCodingPolicyResponse)
+              .toArray(AddErasureCodingPolicyResponse[]::new);
       return responses;
     }  catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
@@ -1781,17 +1783,17 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public ErasureCodingPolicy[] getErasureCodingPolicies() throws IOException {
+  public ErasureCodingPolicyInfo[] getErasureCodingPolicies()
+      throws IOException {
     try {
       GetErasureCodingPoliciesResponseProto response = rpcProxy
           .getErasureCodingPolicies(null, VOID_GET_EC_POLICIES_REQUEST);
-      ErasureCodingPolicy[] ecPolicies =
-          new ErasureCodingPolicy[response.getEcPoliciesCount()];
+      ErasureCodingPolicyInfo[] ecPolicies =
+          new ErasureCodingPolicyInfo[response.getEcPoliciesCount()];
       int i = 0;
-      for (ErasureCodingPolicyProto ecPolicyProto :
-          response.getEcPoliciesList()) {
+      for (ErasureCodingPolicyProto proto : response.getEcPoliciesList()) {
         ecPolicies[i++] =
-            PBHelperClient.convertErasureCodingPolicy(ecPolicyProto);
+            PBHelperClient.convertErasureCodingPolicyInfo(proto);
       }
       return ecPolicies;
     } catch (ServiceException e) {

@@ -35,6 +35,11 @@ public final class Constants {
   private Constants() {
   }
 
+  /**
+   * default hadoop temp dir on local system: {@value}.
+   */
+  public static final String HADOOP_TMP_DIR = "hadoop.tmp.dir";
+
   /** The minimum multipart size which S3 supports. */
   public static final int MULTIPART_MIN_SIZE = 5 * 1024 * 1024;
 
@@ -136,7 +141,10 @@ public final class Constants {
   public static final String BUFFER_DIR = "fs.s3a.buffer.dir";
 
   // switch to the fast block-by-block upload mechanism
+  // this is the only supported upload mechanism
+  @Deprecated
   public static final String FAST_UPLOAD = "fs.s3a.fast.upload";
+  @Deprecated
   public static final boolean DEFAULT_FAST_UPLOAD = false;
 
   //initial size of memory buffer for a fast upload
@@ -325,14 +333,6 @@ public final class Constants {
   @InterfaceAudience.Private
   public static final int MAX_MULTIPART_COUNT = 10000;
 
-  /**
-   * Classname of the S3A-specific output committer factory. This
-   * is what must be declared when attempting to use
-   */
-  @InterfaceStability.Unstable
-  public static final String S3A_OUTPUT_COMMITTER_FACTORY =
-      "org.apache.hadoop.fs.s3a.commit.S3AOutputCommitterFactory";
-
   /* Constants. */
   public static final String S3_METADATA_STORE_IMPL =
       "fs.s3a.metadatastore.impl";
@@ -408,13 +408,6 @@ public final class Constants {
   public static final int S3GUARD_DDB_BACKGROUND_SLEEP_MSEC_DEFAULT = 25;
 
   /**
-   * V1 committer.
-   */
-  @InterfaceStability.Unstable
-  public static final String S3A_OUTPUT_COMMITTER_MRV1 =
-      "org.apache.hadoop.fs.s3a.commit.S3OutputCommitterMRv1";
-
-  /**
    * The default "Null" metadata store: {@value}.
    */
   @InterfaceStability.Unstable
@@ -459,5 +452,57 @@ public final class Constants {
 
   @InterfaceStability.Unstable
   public static final int DEFAULT_LIST_VERSION = 2;
+
+  @InterfaceStability.Unstable
+  public static final String FAIL_INJECT_THROTTLE_PROBABILITY =
+      "fs.s3a.failinject.throttle.probability";
+
+  @InterfaceStability.Unstable
+  public static final String FAIL_INJECT_CLIENT_FACTORY =
+      "org.apache.hadoop.fs.s3a.InconsistentS3ClientFactory";
+
+  /**
+   * Number of times to retry any repeatable S3 client request on failure,
+   * excluding throttling requests: {@value}.
+   */
+  public static final String RETRY_LIMIT = "fs.s3a.retry.limit";
+
+  /**
+   * Default retry limit: {@value}.
+   */
+  public static final int RETRY_LIMIT_DEFAULT = DEFAULT_MAX_ERROR_RETRIES;
+
+  /**
+   * Interval between retry attempts.: {@value}.
+   */
+  public static final String RETRY_INTERVAL = "fs.s3a.retry.interval";
+
+  /**
+   * Default retry interval: {@value}.
+   */
+  public static final String RETRY_INTERVAL_DEFAULT = "500ms";
+
+  /**
+   * Number of times to retry any throttled request: {@value}.
+   */
+  public static final String RETRY_THROTTLE_LIMIT =
+      "fs.s3a.retry.throttle.limit";
+
+  /**
+   * Default throttled retry limit: {@value}.
+   */
+  public static final int RETRY_THROTTLE_LIMIT_DEFAULT =
+      DEFAULT_MAX_ERROR_RETRIES;
+
+  /**
+   * Interval between retry attempts on throttled requests: {@value}.
+   */
+  public static final String RETRY_THROTTLE_INTERVAL =
+      "fs.s3a.retry.throttle.interval";
+
+  /**
+   * Default throttled retry interval: {@value}.
+   */
+  public static final String RETRY_THROTTLE_INTERVAL_DEFAULT = "500ms";
 
 }

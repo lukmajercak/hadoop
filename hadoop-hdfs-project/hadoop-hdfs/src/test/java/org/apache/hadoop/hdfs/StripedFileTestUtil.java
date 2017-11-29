@@ -79,10 +79,15 @@ public class StripedFileTestUtil {
     assertEquals("File length should be the same", fileLength, status.getLen());
   }
 
-  static void verifyPread(FileSystem fs, Path srcPath,  int fileLength,
-      byte[] expected, byte[] buf) throws IOException {
-    final ErasureCodingPolicy ecPolicy =
-        ((DistributedFileSystem)fs).getErasureCodingPolicy(srcPath);
+  static void verifyPread(DistributedFileSystem fs, Path srcPath,
+      int fileLength, byte[] expected, byte[] buf) throws IOException {
+    final ErasureCodingPolicy ecPolicy = fs.getErasureCodingPolicy(srcPath);
+    verifyPread(fs, srcPath, fileLength, expected, buf, ecPolicy);
+  }
+
+  static void verifyPread(FileSystem fs, Path srcPath, int fileLength,
+      byte[] expected, byte[] buf, ErasureCodingPolicy ecPolicy)
+      throws IOException {
     try (FSDataInputStream in = fs.open(srcPath)) {
       int[] startOffsets = {0, 1, ecPolicy.getCellSize() - 102,
           ecPolicy.getCellSize(), ecPolicy.getCellSize() + 102,
@@ -497,7 +502,11 @@ public class StripedFileTestUtil {
         dataBytes.length, parityBytes.length);
     final RawErasureEncoder encoder =
         CodecUtil.createRawEncoder(conf, codecName, coderOptions);
-    encoder.encode(dataBytes, expectedParityBytes);
+    try {
+      encoder.encode(dataBytes, expectedParityBytes);
+    } catch (IOException e) {
+      Assert.fail("Unexpected IOException: " + e.getMessage());
+    }
     for (int i = 0; i < parityBytes.length; i++) {
       if (checkSet.contains(i + dataBytes.length)){
         Assert.assertArrayEquals("i=" + i, expectedParityBytes[i],

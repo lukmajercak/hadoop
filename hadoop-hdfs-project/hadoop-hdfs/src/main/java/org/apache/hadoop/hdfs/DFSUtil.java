@@ -31,11 +31,11 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_RPC_ADD
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SHARED_EDITS_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMESERVICE_ID;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SERVER_HTTPS_KEYPASSWORD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SERVER_HTTPS_KEYSTORE_PASSWORD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SERVER_HTTPS_TRUSTSTORE_PASSWORD_KEY;
-import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -45,6 +45,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Collection;
@@ -75,6 +77,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
+import org.apache.hadoop.hdfs.server.common.Util;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.http.HttpServer2;
@@ -455,6 +458,85 @@ public class DFSUtil {
   }
 
   /**
+   * Returns list of Journalnode addresses from the configuration.
+   *
+   * @param conf configuration
+   * @return list of journalnode host names
+   * @throws URISyntaxException
+   * @throws IOException
+   */
+  public static Set<String> getJournalNodeAddresses(
+      Configuration conf) throws URISyntaxException, IOException {
+    Set<String> journalNodeList = new HashSet<>();
+    String journalsUri = "";
+    try {
+      journalsUri = conf.get(DFS_NAMENODE_SHARED_EDITS_DIR_KEY);
+      if (journalsUri == null) {
+        Collection<String> nameserviceIds = DFSUtilClient.
+            getNameServiceIds(conf);
+        for (String nsId : nameserviceIds) {
+          journalsUri = DFSUtilClient.getConfValue(
+              null, nsId, conf, DFS_NAMENODE_SHARED_EDITS_DIR_KEY);
+          if (journalsUri == null) {
+            Collection<String> nnIds = DFSUtilClient.getNameNodeIds(conf, nsId);
+            for (String nnId : nnIds) {
+              String suffix = DFSUtilClient.concatSuffixes(nsId, nnId);
+              journalsUri = DFSUtilClient.getConfValue(
+                  null, suffix, conf, DFS_NAMENODE_SHARED_EDITS_DIR_KEY);
+              if (journalsUri == null ||
+                  !journalsUri.startsWith("qjournal://")) {
+                return journalNodeList;
+              } else {
+                LOG.warn(DFS_NAMENODE_SHARED_EDITS_DIR_KEY +" is to be " +
+                    "configured as nameservice" +
+                    " specific key(append it with nameserviceId), no need" +
+                    " to append it with namenodeId");
+                URI uri = new URI(journalsUri);
+                List<InetSocketAddress> socketAddresses = Util.
+                    getAddressesList(uri);
+                for (InetSocketAddress is : socketAddresses) {
+                  journalNodeList.add(is.getHostName());
+                }
+              }
+            }
+          } else if (!journalsUri.startsWith("qjournal://")) {
+            return journalNodeList;
+          } else {
+            URI uri = new URI(journalsUri);
+            List<InetSocketAddress> socketAddresses = Util.
+                getAddressesList(uri);
+            for (InetSocketAddress is : socketAddresses) {
+              journalNodeList.add(is.getHostName());
+            }
+          }
+        }
+      } else {
+        if (!journalsUri.startsWith("qjournal://")) {
+          return journalNodeList;
+        } else {
+          URI uri = new URI(journalsUri);
+          List<InetSocketAddress> socketAddresses = Util.getAddressesList(uri);
+          for (InetSocketAddress is : socketAddresses) {
+            journalNodeList.add(is.getHostName());
+          }
+        }
+      }
+    } catch(UnknownHostException e) {
+      LOG.error("The conf property " + DFS_NAMENODE_SHARED_EDITS_DIR_KEY
+          + " is not properly set with correct journal node hostnames");
+      throw new UnknownHostException(journalsUri);
+    } catch(URISyntaxException e)  {
+      LOG.error("The conf property " + DFS_NAMENODE_SHARED_EDITS_DIR_KEY
+          + "is not set properly with correct journal node uri");
+      throw new URISyntaxException(journalsUri, "The conf property " +
+          DFS_NAMENODE_SHARED_EDITS_DIR_KEY + "is not" +
+          " properly set with correct journal node uri");
+    }
+
+    return journalNodeList;
+  }
+
+  /**
    * Returns list of InetSocketAddress corresponding to  backup node rpc 
    * addresses from the configuration.
    * 
@@ -493,25 +575,61 @@ public class DFSUtil {
   }
 
   /**
+   * Returns list of InetSocketAddresses corresponding to namenodes from the
+   * configuration.
+   * 
+   * Returns namenode address specifically configured for datanodes (using
+   * service ports), if found. If not, regular RPC address configured for other
+   * clients is returned.
+   * 
+   * @param conf configuration
+   * @return list of InetSocketAddress
+   * @throws IOException on error
+   */
+  public static Map<String, Map<String, InetSocketAddress>> getNNServiceRpcAddresses(
+      Configuration conf) throws IOException {
+    // Use default address as fall back
+    String defaultAddress;
+    try {
+      defaultAddress = NetUtils.getHostPortString(
+          DFSUtilClient.getNNAddress(conf));
+    } catch (IllegalArgumentException e) {
+      defaultAddress = null;
+    }
+    
+    Map<String, Map<String, InetSocketAddress>> addressList =
+      DFSUtilClient.getAddresses(conf, defaultAddress,
+                                 DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
+                                 DFS_NAMENODE_RPC_ADDRESS_KEY);
+    if (addressList.isEmpty()) {
+      throw new IOException("Incorrect configuration: namenode address "
+          + DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY + " or "  
+          + DFS_NAMENODE_RPC_ADDRESS_KEY
+          + " is not configured.");
+    }
+    return addressList;
+  }
+
+  /**
    * Returns list of InetSocketAddresses corresponding to the namenode
    * that manages this cluster. Note this is to be used by datanodes to get
    * the list of namenode addresses to talk to.
    *
-   * Returns namenode address specifically configured for datanodes
+   * Returns namenode address specifically configured for datanodes (using
+   * service ports), if found. If not, regular RPC address configured for other
+   * clients is returned.
    *
    * @param conf configuration
    * @return list of InetSocketAddress
    * @throws IOException on error
    */
   public static Map<String, Map<String, InetSocketAddress>>
-      getNNServiceRpcAddresses(Configuration conf) throws IOException {
+    getNNServiceRpcAddressesForCluster(Configuration conf) throws IOException {
     // Use default address as fall back
     String defaultAddress;
     try {
-      InetSocketAddress rpcAddress = DFSUtilClient.getNNAddress(conf);
-      InetSocketAddress serviceAddress = InetSocketAddress.createUnresolved(
-          rpcAddress.getHostName(), DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT);
-      defaultAddress = NetUtils.getHostPortString(serviceAddress);
+      defaultAddress = NetUtils.getHostPortString(
+          DFSUtilClient.getNNAddress(conf));
     } catch (IllegalArgumentException e) {
       defaultAddress = null;
     }
@@ -534,46 +652,16 @@ public class DFSUtil {
       }
     }
 
-    // If true, then replace the port numbers in the final address list
-    // with the default service RPC port.
-    boolean replacePortNumbers = false;
-
-    // First try to lookup using the service RPC address keys.
     Map<String, Map<String, InetSocketAddress>> addressList =
-            DFSUtilClient.getAddressesForNsIds(
-                conf, parentNameServices, null,
-                DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
-
-    // Next try to lookup using the RPC address key.
-    if (addressList.isEmpty()) {
-      replacePortNumbers = true;
-      addressList = DFSUtilClient.getAddressesForNsIds(
-          conf, parentNameServices, null, DFS_NAMENODE_RPC_ADDRESS_KEY);
-    }
-
-    // Finally, fallback to the default address.
-    // This will not yield the correct address in a federated/HA setup.
-    if (addressList.isEmpty()) {
-      addressList = DFSUtilClient.getAddressesForNsIds(
-          conf, parentNameServices, defaultAddress);
-    }
-
+            DFSUtilClient.getAddressesForNsIds(conf, parentNameServices,
+                                               defaultAddress,
+                                               DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
+                                               DFS_NAMENODE_RPC_ADDRESS_KEY);
     if (addressList.isEmpty()) {
       throw new IOException("Incorrect configuration: namenode address "
-          + DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY + " or "
-          + DFS_NAMENODE_RPC_ADDRESS_KEY
-          + " is not configured.");
-    }
-
-    if (replacePortNumbers) {
-      // Replace the RPC port(s) with the default service RPC port(s)
-      addressList.forEach((nsId, addresses) -> {
-        addresses.forEach((nnId, address) -> {
-          InetSocketAddress serviceAddress = InetSocketAddress.createUnresolved(
-              address.getHostName(), DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT);
-          addresses.put(nnId, serviceAddress);
-        });
-      });
+              + DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY + " or "
+              + DFS_NAMENODE_RPC_ADDRESS_KEY
+              + " is not configured.");
     }
     return addressList;
   }
@@ -1225,19 +1313,52 @@ public class DFSUtil {
     String serviceAddrKey = DFSUtilClient.concatSuffixes(
         DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY, nsId, nnId);
 
+    String addrKey = DFSUtilClient.concatSuffixes(
+        DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, nsId, nnId);
+
     String serviceRpcAddr = conf.get(serviceAddrKey);
     if (serviceRpcAddr == null) {
-      String addrKey = DFSUtilClient.concatSuffixes(
-          DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY, nsId, nnId);
-      String rpcAddress = conf.get(addrKey);
-      if (rpcAddress != null) {
-        InetSocketAddress rpcAddr = NetUtils.createSocketAddr(rpcAddress);
-        InetSocketAddress serviceAddr = InetSocketAddress.createUnresolved(
-            rpcAddr.getHostName(), DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT);
-        serviceRpcAddr = NetUtils.getHostPortString(serviceAddr);
-      }
+      serviceRpcAddr = conf.get(addrKey);
     }
     return serviceRpcAddr;
+  }
+
+  /**
+   * Map a logical namenode ID to its web address. Use the given nameservice if
+   * specified, or the configured one if none is given.
+   *
+   * @param conf Configuration
+   * @param nsId which nameservice nnId is a part of, optional
+   * @param nnId the namenode ID to get the service addr for
+   * @return the service addr, null if it could not be determined
+   */
+  public static String getNamenodeWebAddr(final Configuration conf, String nsId,
+      String nnId) {
+
+    if (nsId == null) {
+      nsId = getOnlyNameServiceIdOrNull(conf);
+    }
+
+    String webAddrKey = DFSUtilClient.concatSuffixes(
+        DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY, nsId, nnId);
+
+    String webAddr =
+        conf.get(webAddrKey, DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_DEFAULT);
+    return webAddr;
+  }
+
+  /**
+   * Get all of the Web addresses of the individual NNs in a given nameservice.
+   *
+   * @param conf Configuration
+   * @param nsId the nameservice whose NNs addresses we want.
+   * @param defaultValue default address to return in case key is not found.
+   * @return A map from nnId -> Web address of each NN in the nameservice.
+   */
+  public static Map<String, InetSocketAddress> getWebAddressesForNameserviceId(
+      Configuration conf, String nsId, String defaultValue) {
+    return DFSUtilClient.getAddressesForNameserviceId(conf, nsId, defaultValue,
+        DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
   }
 
   /**

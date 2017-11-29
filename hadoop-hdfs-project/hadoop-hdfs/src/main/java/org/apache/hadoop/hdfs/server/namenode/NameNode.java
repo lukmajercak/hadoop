@@ -50,6 +50,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.RollingUpgradeStartupOption;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
 import org.apache.hadoop.hdfs.server.common.MetricsLoggerTask;
+import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
 import org.apache.hadoop.hdfs.server.namenode.ha.ActiveState;
 import org.apache.hadoop.hdfs.server.namenode.ha.BootstrapStandby;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
@@ -505,17 +506,18 @@ public class NameNode extends ReconfigurableBase implements
   
   /**
    * Fetches the address for services to use when connecting to namenode
+   * based on the value of fallback returns null if the special
+   * address is not specified or returns the default namenode address
+   * to be used by both clients and services.
    * Services here are datanodes, backup node, any non client connection
    */
-  public static InetSocketAddress getServiceAddress(Configuration conf) {
-    String address = conf.getTrimmed(DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
-    if (address == null || address.isEmpty()) {
-      InetSocketAddress rpcAddress = DFSUtilClient.getNNAddress(conf);
-      return NetUtils.createSocketAddr(rpcAddress.getHostName(),
-          HdfsClientConfigKeys.DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT);
+  public static InetSocketAddress getServiceAddress(Configuration conf,
+                                                        boolean fallback) {
+    String addr = conf.getTrimmed(DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
+    if (addr == null || addr.isEmpty()) {
+      return fallback ? DFSUtilClient.getNNAddress(conf) : null;
     }
-    return NetUtils.createSocketAddr(address,
-        HdfsClientConfigKeys.DFS_NAMENODE_SERVICE_RPC_PORT_DEFAULT);
+    return DFSUtilClient.getNNAddress(addr);
   }
 
   //
@@ -553,7 +555,7 @@ public class NameNode extends ReconfigurableBase implements
    * If the service rpc is not configured returns null
    */
   protected InetSocketAddress getServiceRpcServerAddress(Configuration conf) {
-    return NameNode.getServiceAddress(conf);
+    return NameNode.getServiceAddress(conf, false);
   }
 
   protected InetSocketAddress getRpcServerAddress(Configuration conf) {
@@ -614,8 +616,7 @@ public class NameNode extends ReconfigurableBase implements
   }
 
   /**
-   * Modifies the configuration passed to contain the service rpc address
-   * setting.
+   * Modifies the configuration passed to contain the service rpc address setting
    */
   protected void setRpcServiceServerAddress(Configuration conf,
       InetSocketAddress serviceRPCAddress) {
@@ -1071,13 +1072,6 @@ public class NameNode extends ReconfigurableBase implements
   }
 
   /**
-   * @return NameNode service RPC address in "host:port" string form
-   */
-  public String getServiceRpcAddressHostPortString() {
-    return NetUtils.getHostPortString(getServiceRpcAddress());
-  }
-
-  /**
    * @return NameNode HTTP address, used by the Web UI, image transfer,
    *    and HTTP-based file system clients like WebHDFS
    */
@@ -1152,6 +1146,21 @@ public class NameNode extends ReconfigurableBase implements
     try {
       FSNamesystem fsn = new FSNamesystem(conf, fsImage);
       fsImage.getEditLog().initJournalsForWrite();
+
+      // Abort NameNode format if reformat is disabled and if
+      // meta-dir already exists
+      if (conf.getBoolean(DFSConfigKeys.DFS_REFORMAT_DISABLED,
+          DFSConfigKeys.DFS_REFORMAT_DISABLED_DEFAULT)) {
+        force = false;
+        isInteractive = false;
+        for (StorageDirectory sd : fsImage.storage.dirIterable(null)) {
+          if (sd.hasSomeData()) {
+            throw new NameNodeFormatException(
+                "NameNode format aborted as reformat is disabled for "
+                    + "this cluster.");
+          }
+        }
+      }
 
       if (!fsImage.confirmFormat(force, isInteractive)) {
         return true; // aborted

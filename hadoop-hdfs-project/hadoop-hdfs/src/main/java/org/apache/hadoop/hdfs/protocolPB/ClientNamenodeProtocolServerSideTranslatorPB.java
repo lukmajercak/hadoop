@@ -36,7 +36,7 @@ import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.QuotaUsage;
-import org.apache.hadoop.hdfs.protocol.AddECPolicyResponse;
+import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
@@ -948,6 +949,7 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   }
 
   @Override
+
   public GetFileLinkInfoResponseProto getFileLinkInfo(RpcController controller,
       GetFileLinkInfoRequestProto req) throws ServiceException {
     try {
@@ -1682,11 +1684,12 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   public GetErasureCodingPoliciesResponseProto getErasureCodingPolicies(RpcController controller,
       GetErasureCodingPoliciesRequestProto request) throws ServiceException {
     try {
-      ErasureCodingPolicy[] ecPolicies = server.getErasureCodingPolicies();
+      ErasureCodingPolicyInfo[] ecpInfos = server.getErasureCodingPolicies();
       GetErasureCodingPoliciesResponseProto.Builder resBuilder = GetErasureCodingPoliciesResponseProto
           .newBuilder();
-      for (ErasureCodingPolicy ecPolicy : ecPolicies) {
-        resBuilder.addEcPolicies(PBHelperClient.convertErasureCodingPolicy(ecPolicy));
+      for (ErasureCodingPolicyInfo info : ecpInfos) {
+        resBuilder.addEcPolicies(
+            PBHelperClient.convertErasureCodingPolicy(info));
       }
       return resBuilder.build();
     } catch (IOException e) {
@@ -1721,15 +1724,16 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
       ErasureCodingPolicy[] policies = request.getEcPoliciesList().stream()
           .map(PBHelperClient::convertErasureCodingPolicy)
           .toArray(ErasureCodingPolicy[]::new);
-      AddECPolicyResponse[] result = server
+      AddErasureCodingPolicyResponse[] result = server
           .addErasureCodingPolicies(policies);
 
-      List<HdfsProtos.AddECPolicyResponseProto> responseProtos = Arrays
-          .stream(result).map(PBHelperClient::convertAddECPolicyResponse)
-          .collect(Collectors.toList());
+      List<HdfsProtos.AddErasureCodingPolicyResponseProto> responseProtos =
+          Arrays.stream(result)
+              .map(PBHelperClient::convertAddErasureCodingPolicyResponse)
+              .collect(Collectors.toList());
       AddErasureCodingPoliciesResponseProto response =
           AddErasureCodingPoliciesResponseProto.newBuilder()
-            .addAllResponses(responseProtos).build();
+              .addAllResponses(responseProtos).build();
       return response;
     } catch (IOException e) {
       throw new ServiceException(e);

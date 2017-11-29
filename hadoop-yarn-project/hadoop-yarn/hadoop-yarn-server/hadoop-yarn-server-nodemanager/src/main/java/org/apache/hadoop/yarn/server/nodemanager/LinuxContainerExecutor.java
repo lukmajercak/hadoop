@@ -33,6 +33,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ConfigurationException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerDiagnosticsUpdateEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainerLaunch;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperation;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperationException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperationExecutor;
@@ -62,6 +63,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import static org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.LinuxContainerRuntimeConstants.*;
@@ -280,7 +282,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   }
 
   @Override
-  public void init() throws IOException {
+  public void init(Context nmContext) throws IOException {
     Configuration conf = super.getConf();
 
     // Send command to executor which will just start up,
@@ -304,7 +306,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
 
     try {
       resourceHandlerChain = ResourceHandlerModule
-          .getConfiguredResourceHandlerChain(conf);
+          .getConfiguredResourceHandlerChain(conf, nmContext);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Resource handler chain enabled = " + (resourceHandlerChain
             != null));
@@ -323,7 +325,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
       if (linuxContainerRuntime == null) {
         LinuxContainerRuntime runtime = new DelegatingLinuxContainerRuntime();
 
-        runtime.initialize(conf);
+        runtime.initialize(conf, nmContext);
         this.linuxContainerRuntime = runtime;
       }
     } catch (ContainerExecutionException e) {
@@ -381,6 +383,10 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     List<String> localizerArgs = new ArrayList<>();
 
     buildMainArgs(localizerArgs, user, appId, locId, nmAddr, localDirs);
+
+    Path containerLogDir = getContainerLogDir(dirsHandler, appId, locId);
+    localizerArgs = replaceWithContainerLogDir(localizerArgs, containerLogDir);
+
     initializeContainerOp.appendArgs(localizerArgs);
 
     try {
@@ -401,6 +407,27 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     }
   }
 
+  private List<String> replaceWithContainerLogDir(List<String> commands,
+      Path containerLogDir) {
+    List<String> newCmds = new ArrayList<>(commands.size());
+
+    for (String item : commands) {
+      newCmds.add(item.replace(ApplicationConstants.LOG_DIR_EXPANSION_VAR,
+          containerLogDir.toString()));
+    }
+
+    return newCmds;
+  }
+
+  private Path getContainerLogDir(LocalDirsHandlerService dirsHandler,
+      String appId, String containerId) throws IOException {
+    String relativeContainerLogDir = ContainerLaunch
+        .getRelativeContainerLogDir(appId, containerId);
+
+    return dirsHandler.getLogPathForWrite(relativeContainerLogDir,
+        false);
+  }
+
   /**
    * Set up the {@link ContainerLocalizer}.
    *
@@ -416,7 +443,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
   public void buildMainArgs(List<String> command, String user, String appId,
       String locId, InetSocketAddress nmAddr, List<String> localDirs) {
     ContainerLocalizer.buildMainArgs(command, user, appId, locId, nmAddr,
-      localDirs);
+        localDirs, super.getConf());
   }
 
   @Override
@@ -438,6 +465,13 @@ public class LinuxContainerExecutor extends ContainerExecutor {
       linuxContainerRuntime.prepareContainer(builder.build());
     } catch (ContainerExecutionException e) {
       throw new IOException("Unable to prepare container: ", e);
+    }
+  }
+
+  @Override
+  protected void updateEnvForWhitelistVars(Map<String, String> env) {
+    if (linuxContainerRuntime.useWhitelistEnv(env)) {
+      super.updateEnvForWhitelistVars(env);
     }
   }
 
@@ -532,8 +566,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
         if (!Optional.fromNullable(e.getErrorOutput()).or("").isEmpty()) {
           builder.append("Exception message: " + e.getErrorOutput() + "\n");
         }
-        builder.append("Stack trace: "
-            + StringUtils.stringifyException(e) + "\n");
+        //Skip stack trace
         String output = e.getOutput();
         if (output != null && !e.getOutput().isEmpty()) {
           builder.append("Shell output: " + output + "\n");
@@ -836,5 +869,10 @@ public class LinuxContainerExecutor extends ContainerExecutor {
           "; exit code = " + exitCode + " and output: " + e.getOutput(),
           e);
     }
+  }
+
+  @VisibleForTesting
+  public ResourceHandler getResourceHandler() {
+    return resourceHandlerChain;
   }
 }
