@@ -663,17 +663,12 @@ public abstract class GenericTestUtils {
         interrupted = true;
       }
       try {
-        return callRealMethod(invocation);
+        return invocation.callRealMethod();
       } finally {
         if (interrupted) {
           Thread.currentThread().interrupt();
         }
       }
-    }
-
-    protected Object callRealMethod(InvocationOnMock invocation)
-        throws Throwable {
-      return invocation.callRealMethod();
     }
   }
 

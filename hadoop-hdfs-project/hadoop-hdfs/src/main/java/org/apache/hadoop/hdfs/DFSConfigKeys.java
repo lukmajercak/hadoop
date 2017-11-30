@@ -203,11 +203,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_DEFAULT = 5*60*1000;
   public static final String  DFS_NAMENODE_TOLERATE_HEARTBEAT_MULTIPLIER_KEY = "dfs.namenode.tolerate.heartbeat.multiplier";
   public static final int     DFS_NAMENODE_TOLERATE_HEARTBEAT_MULTIPLIER_DEFAULT = 4;
-  public static final String
-      DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY =
-          "dfs.namenode.block.recovery.timeout.multiplier";
-  public static final int
-      DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_DEFAULT = 60;
   public static final String  DFS_NAMENODE_ACCESSTIME_PRECISION_KEY =
       HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
   public static final long    DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT = 3600000;

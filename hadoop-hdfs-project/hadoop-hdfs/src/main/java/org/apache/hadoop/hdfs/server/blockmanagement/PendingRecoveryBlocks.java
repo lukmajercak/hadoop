@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
@@ -38,7 +39,7 @@ class PendingRecoveryBlocks {
   /** The timeout for issuing a block recovery again.
    * (it should be larger than the time to recover a block)
    */
-  private final long recoveryTimeoutInterval;
+  private long recoveryTimeoutInterval;
 
   PendingRecoveryBlocks(long timeout) {
     this.recoveryTimeoutInterval = timeout;
@@ -95,6 +96,11 @@ class PendingRecoveryBlocks {
 
   long getTime() {
     return Time.monotonicNow();
+  }
+
+  @VisibleForTesting
+  synchronized void setRecoveryTimeoutInterval(long recoveryTimeoutInterval) {
+    this.recoveryTimeoutInterval = recoveryTimeoutInterval;
   }
 
   /**

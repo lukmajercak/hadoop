@@ -17,8 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY;
 import static org.apache.hadoop.hdfs.protocol.BlockType.CONTIGUOUS;
 import static org.apache.hadoop.hdfs.protocol.BlockType.STRIPED;
 import static org.apache.hadoop.util.ExitUtil.terminate;
@@ -165,6 +163,8 @@ public class BlockManager implements BlockStatsMXBean {
 
   private static final String QUEUE_REASON_FUTURE_GENSTAMP =
     "generation stamp is in the future";
+
+  private static final long BLOCK_RECOVERY_TIMEOUT_MULTIPLIER = 30;
 
   private final Namesystem namesystem;
 
@@ -557,12 +557,8 @@ public class BlockManager implements BlockStatsMXBean {
     long heartbeatIntervalSecs = conf.getTimeDuration(
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
         DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT, TimeUnit.SECONDS);
-    int timeoutMultiplier = conf.getInt(
-        DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY,
-        DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_DEFAULT
-    );
-    pendingRecoveryBlocks = new PendingRecoveryBlocks(
-        TimeUnit.SECONDS.toMillis(heartbeatIntervalSecs * timeoutMultiplier));
+    long blockRecoveryTimeout = getBlockRecoveryTimeout(heartbeatIntervalSecs);
+    pendingRecoveryBlocks = new PendingRecoveryBlocks(blockRecoveryTimeout);
 
     this.blockReportLeaseManager = new BlockReportLeaseManager(conf);
 
@@ -4896,5 +4892,15 @@ public class BlockManager implements BlockStatsMXBean {
       blockIndices[i++] = index;
     }
     return i;
+  }
+
+  private static long getBlockRecoveryTimeout(long heartbeatIntervalSecs) {
+    return TimeUnit.SECONDS.toMillis(heartbeatIntervalSecs *
+        BLOCK_RECOVERY_TIMEOUT_MULTIPLIER);
+  }
+
+  @VisibleForTesting
+  public void setBlockRecoveryTimeout(long blockRecoveryTimeout) {
+    pendingRecoveryBlocks.setRecoveryTimeoutInterval(blockRecoveryTimeout);
   }
 }

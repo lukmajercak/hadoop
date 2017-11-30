@@ -22,7 +22,6 @@ import org.apache.hadoop.hdfs.AppendTestUtil;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -47,6 +46,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -1059,21 +1059,33 @@ public class TestBlockRecovery {
   @Test(timeout = 300000L)
   public void testRecoveryTimeout() throws Exception {
     tearDown(); // Stop the Mocked DN started in startup()
+    final Random r = new Random();
 
     // Make sure first commitBlockSynchronization call from the DN gets lost
     // for the recovery timeout to expire and new recovery attempt
     // to be started.
-    SleepAnswer delayer = new SleepAnswer(3000, 6000) {
-      private boolean callRealMethod = false;
+    SleepAnswer delayer = new SleepAnswer(3000) {
+      private final AtomicBoolean callRealMethod = new AtomicBoolean();
 
       @Override
-      public Object callRealMethod(InvocationOnMock invocation)
-          throws Throwable {
-        if (callRealMethod) {
-          return invocation.callRealMethod();
+      public Object answer(InvocationOnMock invocation) throws Throwable {
+        boolean interrupted = false;
+        try {
+          Thread.sleep(r.nextInt(3000) + 6000);
+        } catch (InterruptedException ie) {
+          interrupted = true;
         }
-        callRealMethod = true;
-        return null;
+        try {
+          if (callRealMethod.get()) {
+            return invocation.callRealMethod();
+          }
+          callRealMethod.set(true);
+          return null;
+        } finally {
+          if (interrupted) {
+            Thread.currentThread().interrupt();
+          }
+        }
       }
     };
     testRecoveryWithDatanodeDelayed(delayer);
@@ -1083,8 +1095,6 @@ public class TestBlockRecovery {
       GenericTestUtils.SleepAnswer recoveryDelayer) throws Exception {
     Configuration configuration = new HdfsConfiguration();
     configuration.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1);
-    configuration.setInt(DFS_NAMENODE_BLOCK_RECOVERY_TIMEOUT_MULTIPLIER_KEY,
-        10);
     MiniDFSCluster cluster = null;
 
     try {
@@ -1094,6 +1104,7 @@ public class TestBlockRecovery {
       final FSNamesystem ns = cluster.getNamesystem();
       final NameNode nn = cluster.getNameNode();
       final DistributedFileSystem dfs = cluster.getFileSystem();
+      ns.getBlockManager().setBlockRecoveryTimeout(TimeUnit.SECONDS.toMillis(10));
 
       // Create a file and never close the output stream to trigger recovery
       FSDataOutputStream out = dfs.create(new Path("/testSlowRecovery"),
@@ -1126,7 +1137,9 @@ public class TestBlockRecovery {
       }, 300, 300000);
 
     } finally {
-      cluster.shutdown();
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 }
