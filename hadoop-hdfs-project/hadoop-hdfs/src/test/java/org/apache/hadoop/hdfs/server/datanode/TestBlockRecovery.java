@@ -1104,8 +1104,7 @@ public class TestBlockRecovery {
       final FSNamesystem ns = cluster.getNamesystem();
       final NameNode nn = cluster.getNameNode();
       final DistributedFileSystem dfs = cluster.getFileSystem();
-      ns.getBlockManager().setBlockRecoveryTimeout(
-          TimeUnit.SECONDS.toMillis(10));
+      cluster.setBlockRecoveryTimeout(TimeUnit.SECONDS.toMillis(15));
 
       // Create a file and never close the output stream to trigger recovery
       FSDataOutputStream out = dfs.create(new Path("/testSlowRecovery"),
@@ -1122,8 +1121,8 @@ public class TestBlockRecovery {
             commitBlockSynchronization(
                 Mockito.any(ExtendedBlock.class), Mockito.anyInt(),
                 Mockito.anyLong(), Mockito.anyBoolean(),
-                Mockito.anyBoolean(), Mockito.anyObject(),
-                Mockito.anyObject());
+                Mockito.anyBoolean(), Mockito.any(DatanodeID[].class),
+                Mockito.any(String[].class));
       }
 
       // Make sure hard lease expires to trigger replica recovery

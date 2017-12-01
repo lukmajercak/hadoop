@@ -285,8 +285,7 @@ public class TestPipelinesFailover {
     try {
       cluster.waitActive();
       cluster.transitionToActive(0);
-      cluster.getNamesystem().getBlockManager().setBlockRecoveryTimeout(
-          TimeUnit.SECONDS.toMillis(1));
+      cluster.setBlockRecoveryTimeout(TimeUnit.SECONDS.toMillis(1));
       Thread.sleep(500);
 
       LOG.info("Starting with NN 0 active");
