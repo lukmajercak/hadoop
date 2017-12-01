@@ -1104,7 +1104,8 @@ public class TestBlockRecovery {
       final FSNamesystem ns = cluster.getNamesystem();
       final NameNode nn = cluster.getNameNode();
       final DistributedFileSystem dfs = cluster.getFileSystem();
-      ns.getBlockManager().setBlockRecoveryTimeout(TimeUnit.SECONDS.toMillis(10));
+      ns.getBlockManager().setBlockRecoveryTimeout(
+          TimeUnit.SECONDS.toMillis(10));
 
       // Create a file and never close the output stream to trigger recovery
       FSDataOutputStream out = dfs.create(new Path("/testSlowRecovery"),
