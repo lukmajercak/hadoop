@@ -1164,15 +1164,15 @@ public class TestBlockRecovery {
     final int numReplicas = 3;
     final String filename = "/testIgnoreMinReplication";
     final Path filePath = new Path(filename);
-    Configuration conf = new HdfsConfiguration();
-    conf.setLong(DFS_HEARTBEAT_INTERVAL_KEY, 1);
-    conf.setInt(DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 2000);
-    conf.setInt(DFS_NAMENODE_REPLICATION_MIN_KEY, 2);
-    conf.setLong(DFS_BLOCK_SIZE_KEY, blockSize);
+    Configuration configuration = new HdfsConfiguration();
+    configuration.setInt(DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 2000);
+    configuration.setInt(DFS_NAMENODE_REPLICATION_MIN_KEY, 2);
+    configuration.setLong(DFS_BLOCK_SIZE_KEY, blockSize);
     MiniDFSCluster cluster = null;
 
     try {
-      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(5).build();
+      cluster = new MiniDFSCluster.Builder(configuration).numDataNodes(5)
+          .build();
       cluster.waitActive();
       final DistributedFileSystem dfs = cluster.getFileSystem();
       final FSNamesystem fsn = cluster.getNamesystem();
@@ -1183,13 +1183,13 @@ public class TestBlockRecovery {
       out.hsync();
 
       DFSClient dfsClient = new DFSClient(new InetSocketAddress("localhost",
-          cluster.getNameNodePort()), conf);
-      LocatedBlock block = dfsClient.getNamenode().
+          cluster.getNameNodePort()), configuration);
+      LocatedBlock blk = dfsClient.getNamenode().
           getBlockLocations(filename, 0, blockSize).
           getLastLocatedBlock();
 
       // Kill 2 out of 3 datanodes so that only 1 alive, thus < minReplication
-      List<DatanodeInfo> dataNodes = Arrays.asList(block.getLocations());
+      List<DatanodeInfo> dataNodes = Arrays.asList(blk.getLocations());
       assertEquals(dataNodes.size(), numReplicas);
       for (DatanodeInfo dataNode : dataNodes.subList(0, numReplicas - 1)) {
         cluster.stopDataNode(dataNode.getName());
@@ -1221,7 +1221,9 @@ public class TestBlockRecovery {
           dfs, filePath), 1, numReplicas, 0);
 
     } finally {
-      cluster.shutdown();
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 }

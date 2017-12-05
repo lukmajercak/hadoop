@@ -164,7 +164,7 @@ public class BlockManager implements BlockStatsMXBean {
   private static final String QUEUE_REASON_FUTURE_GENSTAMP =
     "generation stamp is in the future";
 
-  private static final long BLOCK_RECOVERY_TIMEOUT_MULTIPLIER = 50;
+  private static final long BLOCK_RECOVERY_TIMEOUT_MULTIPLIER = 30;
 
   private final Namesystem namesystem;
 
