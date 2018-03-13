@@ -176,6 +176,18 @@ class BlockSender implements java.io.Closeable {
    */
   private static final long LONG_READ_THRESHOLD_BYTES = 256 * 1024;
 
+  /** Message of exception thrown when client closes hedged read. */
+  private static final String[] IGNORED_CLIENT_EXCEPTION_MESSAGES =
+      new String[]{
+          "Broken pipe",
+          "Connection reset",
+          // WSAECONNRESET
+          "An existing connection was forcibly closed by the remote host",
+          // WSAECONNABORTED
+          "An established connection was aborted by the software in your " +
+              "host machine",
+          "The stream is closed"};
+
   // The number of bytes per checksum here determines the alignment
   // of reads: we always start reading at a checksum chunk boundary,
   // even if the checksum type is NULL. So, choosing too big of a value
@@ -645,8 +657,7 @@ class BlockSender implements java.io.Closeable {
          * coding example. NEVER do it to drive a program logic. NEVER.
          * It was done here because the NIO throws an IOException for EPIPE.
          */
-        String ioem = e.getMessage();
-        if (!ioem.startsWith("Broken pipe") && !ioem.startsWith("Connection reset")) {
+        if (!ignoreExceptionInSendBlock(e)) {
           LOG.error("BlockSender.sendChunks() exception: ", e);
           datanode.getBlockScanner().markSuspectBlock(
               ris.getVolumeRef().getVolume().getStorageID(),
@@ -661,6 +672,16 @@ class BlockSender implements java.io.Closeable {
     }
 
     return dataLen;
+  }
+
+  private boolean ignoreExceptionInSendBlock(Exception e) {
+    String ioem = e.getMessage();
+    for (String ignoredMsg : IGNORED_CLIENT_EXCEPTION_MESSAGES) {
+      if (ioem.startsWith(ignoredMsg)) {
+        return true;
+      }
+    }
+    return false;
   }
   
   /**
