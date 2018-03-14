@@ -121,7 +121,7 @@ public class TestDistributedFileSystem {
   
   private boolean noXmlDefaults = false;
 
-  private volatile MiniDFSCluster cluster;
+  private MiniDFSCluster cluster;
   
   private HdfsConfiguration getTestConfiguration() {
     HdfsConfiguration conf;
