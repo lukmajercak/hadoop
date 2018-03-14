@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.fs.s3a.s3guard;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.s3a.Retries;
 import org.apache.hadoop.fs.s3a.S3AFileStatus;
 import org.apache.hadoop.fs.s3a.S3AInstrumentation;
 import org.apache.hadoop.fs.s3a.Tristate;
@@ -82,6 +84,7 @@ public final class S3Guard {
    * @return Reference to new MetadataStore.
    * @throws IOException if the metadata store cannot be instantiated
    */
+  @Retries.OnceTranslated
   public static MetadataStore getMetadataStore(FileSystem fs)
       throws IOException {
     Preconditions.checkNotNull(fs);
@@ -95,6 +98,10 @@ public final class S3Guard {
           msClass.getSimpleName(), fs.getScheme());
       msInstance.initialize(fs);
       return msInstance;
+    } catch (FileNotFoundException e) {
+      // Don't log this exception as it means the table doesn't exist yet;
+      // rely on callers to catch and treat specially
+      throw e;
     } catch (RuntimeException | IOException e) {
       String message = "Failed to instantiate metadata store " +
           conf.get(S3_METADATA_STORE_IMPL)
@@ -109,14 +116,20 @@ public final class S3Guard {
     }
   }
 
-  private static Class<? extends MetadataStore> getMetadataStoreClass(
+  static Class<? extends MetadataStore> getMetadataStoreClass(
       Configuration conf) {
     if (conf == null) {
       return NullMetadataStore.class;
     }
+    if (conf.get(S3_METADATA_STORE_IMPL) != null && LOG.isDebugEnabled()) {
+      LOG.debug("Metastore option source {}",
+          conf.getPropertySources(S3_METADATA_STORE_IMPL));
+    }
 
-    return conf.getClass(S3_METADATA_STORE_IMPL, NullMetadataStore.class,
-            MetadataStore.class);
+    Class<? extends MetadataStore> aClass = conf.getClass(
+        S3_METADATA_STORE_IMPL, NullMetadataStore.class,
+        MetadataStore.class);
+    return aClass;
   }
 
 
@@ -244,7 +257,15 @@ public final class S3Guard {
    * Update MetadataStore to reflect creation of the given  directories.
    *
    * If an IOException is raised while trying to update the entry, this
-   * operation catches the exception and returns.
+   * operation catches the exception, swallows it and returns.
+   *
+   * @deprecated this is no longer called by {@code S3AFilesystem.innerMkDirs}.
+   * See: HADOOP-15079 (January 2018).
+   * It is currently retained because of its discussion in the method on
+   * atomicity and in case we need to reinstate it or adapt the current
+   * process of directory marker creation.
+   * But it is not being tested and so may age with time...consider
+   * deleting it in future if it's clear there's no need for it.
    * @param ms    MetadataStore to update.
    * @param dirs  null, or an ordered list of directories from leaf to root.
    *              E.g. if /a/ exists, and  mkdirs(/a/b/c/d) is called, this
@@ -254,6 +275,8 @@ public final class S3Guard {
    * @param owner Hadoop user name.
    * @param authoritative Whether to mark new directories as authoritative.
    */
+  @Deprecated
+  @Retries.OnceExceptionsSwallowed
   public static void makeDirsOrdered(MetadataStore ms, List<Path> dirs,
       String owner, boolean authoritative) {
     if (dirs == null) {

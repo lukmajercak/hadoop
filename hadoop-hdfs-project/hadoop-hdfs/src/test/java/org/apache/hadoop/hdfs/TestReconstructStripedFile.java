@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,11 +31,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
@@ -45,6 +49,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.hdfs.server.protocol.BlockECReconstructionCommand.BlockECReconstructionInfo;
@@ -53,6 +58,7 @@ import org.apache.hadoop.io.erasurecode.CodecUtil;
 import org.apache.hadoop.io.erasurecode.ErasureCodeNative;
 import org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawErasureCoderFactory;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Assert;
@@ -62,14 +68,13 @@ import org.junit.Test;
 public class TestReconstructStripedFile {
   public static final Log LOG = LogFactory.getLog(TestReconstructStripedFile.class);
 
-  private final ErasureCodingPolicy ecPolicy =
-      StripedFileTestUtil.getDefaultECPolicy();
-  private final int dataBlkNum = ecPolicy.getNumDataUnits();
-  private final int parityBlkNum = ecPolicy.getNumParityUnits();
-  private final int cellSize = ecPolicy.getCellSize();
-  private final int blockSize = cellSize * 3;
-  private final int groupSize = dataBlkNum + parityBlkNum;
-  private final int dnNum = groupSize + parityBlkNum;
+  private ErasureCodingPolicy ecPolicy;
+  private int dataBlkNum;
+  private int parityBlkNum;
+  private int cellSize;
+  private int blockSize;
+  private int groupSize;
+  private int dnNum;
 
   static {
     GenericTestUtils.setLogLevel(DFSClient.LOG, Level.ALL);
@@ -90,8 +95,20 @@ public class TestReconstructStripedFile {
   private Map<DatanodeID, Integer> dnMap = new HashMap<>();
   private final Random random = new Random();
 
+  public ErasureCodingPolicy getEcPolicy() {
+    return StripedFileTestUtil.getDefaultECPolicy();
+  }
+
   @Before
   public void setup() throws IOException {
+    ecPolicy = getEcPolicy();
+    dataBlkNum = ecPolicy.getNumDataUnits();
+    parityBlkNum = ecPolicy.getNumParityUnits();
+    cellSize = ecPolicy.getCellSize();
+    blockSize = cellSize * 3;
+    groupSize = dataBlkNum + parityBlkNum;
+    dnNum = groupSize + parityBlkNum;
+
     conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
     conf.setInt(
@@ -105,14 +122,12 @@ public class TestReconstructStripedFile {
           CodecUtil.IO_ERASURECODE_CODEC_RS_RAWCODERS_KEY,
           NativeRSRawErasureCoderFactory.CODER_NAME);
     }
-    conf.set(DFSConfigKeys.DFS_NAMENODE_EC_POLICIES_ENABLED_KEY,
-        StripedFileTestUtil.getDefaultECPolicy().getName());
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(dnNum).build();
     cluster.waitActive();
 
     fs = cluster.getFileSystem();
-    fs.getClient().setErasureCodingPolicy("/",
-        StripedFileTestUtil.getDefaultECPolicy().getName());
+    fs.enableErasureCodingPolicy(ecPolicy.getName());
+    fs.getClient().setErasureCodingPolicy("/", ecPolicy.getName());
 
     List<DataNode> datanodes = cluster.getDataNodes();
     for (int i = 0; i < dnNum; i++) {
@@ -427,14 +442,14 @@ public class TestReconstructStripedFile {
 
     BlockECReconstructionInfo invalidECInfo = new BlockECReconstructionInfo(
         new ExtendedBlock("bp-id", 123456), dataDNs, dnStorageInfo, liveIndices,
-        StripedFileTestUtil.getDefaultECPolicy());
+        ecPolicy);
     List<BlockECReconstructionInfo> ecTasks = new ArrayList<>();
     ecTasks.add(invalidECInfo);
     dataNode.getErasureCodingWorker().processErasureCodingTasks(ecTasks);
   }
 
   // HDFS-12044
-  @Test(timeout = 60000)
+  @Test(timeout = 120000)
   public void testNNSendsErasureCodingTasks() throws Exception {
     testNNSendsErasureCodingTasks(1);
     testNNSendsErasureCodingTasks(2);
@@ -447,22 +462,27 @@ public class TestReconstructStripedFile {
     conf.setInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY, 10);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, 20);
-    conf.setInt(DFSConfigKeys.DFS_DN_EC_RECONSTRUCTION_STRIPED_BLK_THREADS_KEY,
+    conf.setInt(DFSConfigKeys.DFS_DN_EC_RECONSTRUCTION_THREADS_KEY,
         2);
+    // Set shorter socket timeout, to allow the recovery task to be reschedule,
+    // if it is connecting to a dead DataNode.
+    conf.setInt(HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY, 5 * 1000);
     cluster = new MiniDFSCluster.Builder(conf)
         .numDataNodes(numDataNodes).build();
     cluster.waitActive();
     fs = cluster.getFileSystem();
-    ErasureCodingPolicy policy = StripedFileTestUtil.getDefaultECPolicy();
+    ErasureCodingPolicy policy = ecPolicy;
+    fs.enableErasureCodingPolicy(policy.getName());
     fs.getClient().setErasureCodingPolicy("/", policy.getName());
 
-    final int fileLen = cellSize * ecPolicy.getNumDataUnits() * 2;
-    for (int i = 0; i < 100; i++) {
+    final int fileLen = cellSize * ecPolicy.getNumDataUnits();
+    for (int i = 0; i < 50; i++) {
       writeFile(fs, "/ec-file-" + i, fileLen);
     }
 
     // Inject data-loss by tear down desired number of DataNodes.
-    assertTrue(policy.getNumParityUnits() >= deadDN);
+    assumeTrue("Ignore case where num dead DNs > num parity units",
+        policy.getNumParityUnits() >= deadDN);
     List<DataNode> dataNodes = new ArrayList<>(cluster.getDataNodes());
     Collections.shuffle(dataNodes);
     for (DataNode dn : dataNodes.subList(0, deadDN)) {
@@ -487,5 +507,63 @@ public class TestReconstructStripedFile {
             DataNode::getXmitsInProgress).sum() == 0,
         500, 30000
     );
+  }
+
+  @Test(timeout = 180000)
+  public void testErasureCodingWorkerXmitsWeight() throws Exception {
+    testErasureCodingWorkerXmitsWeight(1f, ecPolicy.getNumDataUnits());
+    testErasureCodingWorkerXmitsWeight(0f, 1);
+    testErasureCodingWorkerXmitsWeight(10f, 10 * ecPolicy.getNumDataUnits());
+  }
+
+  private void testErasureCodingWorkerXmitsWeight(
+      float weight, int expectedWeight)
+      throws Exception {
+
+    // Reset cluster with customized xmits weight.
+    conf.setFloat(DFSConfigKeys.DFS_DN_EC_RECONSTRUCTION_XMITS_WEIGHT_KEY,
+        weight);
+    cluster.shutdown();
+
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(dnNum).build();
+    cluster.waitActive();
+    fs = cluster.getFileSystem();
+    fs.enableErasureCodingPolicy(ecPolicy.getName());
+    fs.getClient().setErasureCodingPolicy("/", ecPolicy.getName());
+
+    final int fileLen = cellSize * ecPolicy.getNumDataUnits() * 2;
+    writeFile(fs, "/ec-xmits-weight", fileLen);
+
+    DataNode dn = cluster.getDataNodes().get(0);
+    int corruptBlocks = dn.getFSDataset().getFinalizedBlocks(
+        cluster.getNameNode().getNamesystem().getBlockPoolId()).size();
+    int expectedXmits = corruptBlocks * expectedWeight;
+
+    final CyclicBarrier barrier = new CyclicBarrier(corruptBlocks + 1);
+    DataNodeFaultInjector oldInjector = DataNodeFaultInjector.get();
+    DataNodeFaultInjector delayInjector = new DataNodeFaultInjector() {
+      public void stripedBlockReconstruction() throws IOException {
+        try {
+          barrier.await();
+        } catch (InterruptedException | BrokenBarrierException e) {
+          throw new IOException(e);
+        }
+      }
+    };
+    DataNodeFaultInjector.set(delayInjector);
+
+    try {
+      shutdownDataNode(dn);
+      LambdaTestUtils.await(30 * 1000, 500,
+          () -> {
+            int totalXmits = cluster.getDataNodes().stream()
+                  .mapToInt(DataNode::getXmitsInProgress).sum();
+            return totalXmits == expectedXmits;
+          }
+      );
+    } finally {
+      barrier.await();
+      DataNodeFaultInjector.set(oldInjector);
+    }
   }
 }

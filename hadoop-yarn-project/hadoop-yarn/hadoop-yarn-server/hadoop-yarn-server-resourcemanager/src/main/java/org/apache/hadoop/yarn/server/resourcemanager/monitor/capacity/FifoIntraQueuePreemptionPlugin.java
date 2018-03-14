@@ -203,6 +203,12 @@ public class FifoIntraQueuePreemptionPlugin
       Resources.subtractFromNonNegative(preemtableFromApp, tmpApp.selected);
       Resources.subtractFromNonNegative(preemtableFromApp, tmpApp.getAMUsed());
 
+      if (context.getIntraQueuePreemptionOrderPolicy()
+            .equals(IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
+        Resources.subtractFromNonNegative(preemtableFromApp,
+          tmpApp.getFiCaSchedulerApp().getCSLeafQueue().getMinimumAllocation());
+      }
+
       // Calculate toBePreempted from apps as follows:
       // app.preemptable = min(max(app.used - app.selected - app.ideal, 0),
       // intra_q_preemptable)
@@ -406,7 +412,7 @@ public class FifoIntraQueuePreemptionPlugin
         TempUserPerPartition tmpUser = new TempUserPerPartition(
             tq.leafQueue.getUser(userName), tq.queueName,
             Resources.clone(userResourceUsage.getUsed(partition)),
-            Resources.clone(userSpecificAmUsed),
+            Resources.clone(amUsed),
             Resources.clone(userResourceUsage.getReserved(partition)),
             Resources.none());
 

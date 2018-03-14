@@ -29,12 +29,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.authentication.client.AuthenticationException;
 import org.apache.hadoop.security.http.RestCsrfPreventionFilter;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ApplicationBaseProtocol;
@@ -67,10 +64,12 @@ import org.apache.hadoop.yarn.webapp.view.HtmlBlock;
 import org.apache.hadoop.yarn.webapp.view.InfoBlock;
 
 import com.google.inject.Inject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AppBlock extends HtmlBlock {
 
-  private static final Log LOG = LogFactory.getLog(AppBlock.class);
+  private static final Logger LOG = LoggerFactory.getLogger(AppBlock.class);
   protected ApplicationBaseProtocol appBaseProt;
   protected Configuration conf;
   protected ApplicationId appID = null;
@@ -110,8 +109,8 @@ public class AppBlock extends HtmlBlock {
       final GetApplicationReportRequest request =
           GetApplicationReportRequest.newInstance(appID);
       if (callerUGI == null) {
-        throw new AuthenticationException(
-            "Failed to get user name from request");
+        appReport =
+            appBaseProt.getApplicationReport(request).getApplicationReport();
       } else {
         appReport = callerUGI.doAs(
             new PrivilegedExceptionAction<ApplicationReport> () {
@@ -136,6 +135,30 @@ public class AppBlock extends HtmlBlock {
     AppInfo app = new AppInfo(appReport);
 
     setTitle(join("Application ", aid));
+
+    //Validate if able to read application attempts
+    // which should also validate if kill is allowed for the user based on ACLs
+
+    Collection<ApplicationAttemptReport> attempts;
+    try {
+      final GetApplicationAttemptsRequest request =
+          GetApplicationAttemptsRequest.newInstance(appID);
+      attempts = callerUGI.doAs(
+          new PrivilegedExceptionAction<Collection<
+              ApplicationAttemptReport>>() {
+            @Override
+            public Collection<ApplicationAttemptReport> run() throws Exception {
+              return getApplicationAttemptsReport(request);
+            }
+          });
+    } catch (Exception e) {
+      String message =
+          "Failed to read the attempts of the application " + appID + ".";
+      LOG.error(message, e);
+      html.p().__(message).__();
+      return;
+    }
+
 
     // YARN-6890. for secured cluster allow anonymous UI access, application kill
     // shouldn't be there.
@@ -181,75 +204,36 @@ public class AppBlock extends HtmlBlock {
     String schedulerPath = WebAppUtils.getResolvedRMWebAppURLWithScheme(conf) +
         "/cluster/scheduler?openQueues=" + app.getQueue();
 
-    generateOverviewTable(app, schedulerPath, webUiType, appReport);
-
-    Collection<ApplicationAttemptReport> attempts;
-    try {
-      final GetApplicationAttemptsRequest request =
-          GetApplicationAttemptsRequest.newInstance(appID);
-      attempts = callerUGI.doAs(
-          new PrivilegedExceptionAction<Collection<
-              ApplicationAttemptReport>>() {
-            @Override
-            public Collection<ApplicationAttemptReport> run() throws Exception {
-              return getApplicationAttemptsReport(request);
-            }
-          });
-    } catch (Exception e) {
-      String message =
-          "Failed to read the attempts of the application " + appID + ".";
-      LOG.error(message, e);
-      html.p().__(message).__();
-      return;
-    }
-
-    createApplicationMetricsTable(html);
-
-    html.__(InfoBlock.class);
-
-    generateApplicationTable(html, callerUGI, attempts);
-
-  }
-
-  /**
-   * Generate overview table for app web page.
-   * @param app app info.
-   * @param schedulerPath schedule path.
-   * @param webUiType web ui type.
-   * @param appReport app report.
-   */
-  private void generateOverviewTable(AppInfo app, String schedulerPath,
-      String webUiType, ApplicationReport appReport) {
     ResponseInfo overviewTable = info("Application Overview")
-        .__("User:", schedulerPath, app.getUser())
-        .__("Name:", app.getName())
-        .__("Application Type:", app.getType())
-        .__("Application Tags:",
-            app.getApplicationTags() == null ? "" : app.getApplicationTags())
-        .__("Application Priority:", clarifyAppPriority(app.getPriority()))
-        .__(
-            "YarnApplicationState:",
-            app.getAppState() == null ? UNAVAILABLE : clarifyAppState(app
-                .getAppState()))
-        .__("Queue:", schedulerPath, app.getQueue())
-        .__("FinalStatus Reported by AM:",
-            clairfyAppFinalStatus(app.getFinalAppStatus()))
-        .__("Started:", Times.format(app.getStartedTime()))
-        .__(
-            "Elapsed:",
-            StringUtils.formatTime(Times.elapsed(app.getStartedTime(),
-                app.getFinishedTime())))
-        .__(
-            "Tracking URL:",
-            app.getTrackingUrl() == null
-                || app.getTrackingUrl().equals(UNAVAILABLE) ? null : root_url(app
-                .getTrackingUrl()),
-            app.getTrackingUrl() == null
-                || app.getTrackingUrl().equals(UNAVAILABLE) ? "Unassigned" : app
-                .getAppState() == YarnApplicationState.FINISHED
-                || app.getAppState() == YarnApplicationState.FAILED
-                || app.getAppState() == YarnApplicationState.KILLED ? "History"
-                : "ApplicationMaster");
+      .__("User:", schedulerPath, app.getUser())
+      .__("Name:", app.getName())
+      .__("Application Type:", app.getType())
+      .__("Application Tags:",
+        app.getApplicationTags() == null ? "" : app.getApplicationTags())
+      .__("Application Priority:", clarifyAppPriority(app.getPriority()))
+      .__(
+        "YarnApplicationState:",
+        app.getAppState() == null ? UNAVAILABLE : clarifyAppState(app
+          .getAppState()))
+      .__("Queue:", schedulerPath, app.getQueue())
+      .__("FinalStatus Reported by AM:",
+        clairfyAppFinalStatus(app.getFinalAppStatus()))
+      .__("Started:", Times.format(app.getStartedTime()))
+      .__(
+        "Elapsed:",
+        StringUtils.formatTime(Times.elapsed(app.getStartedTime(),
+          app.getFinishedTime())))
+      .__(
+        "Tracking URL:",
+        app.getTrackingUrl() == null
+            || app.getTrackingUrl().equals(UNAVAILABLE) ? null : root_url(app
+          .getTrackingUrl()),
+        app.getTrackingUrl() == null
+            || app.getTrackingUrl().equals(UNAVAILABLE) ? "Unassigned" : app
+          .getAppState() == YarnApplicationState.FINISHED
+            || app.getAppState() == YarnApplicationState.FAILED
+            || app.getAppState() == YarnApplicationState.KILLED ? "History"
+            : "ApplicationMaster");
     if (webUiType != null
         && webUiType.equals(YarnWebParams.RM_WEB_UI)) {
       LogAggregationStatus status = getLogAggregationStatus();
@@ -281,6 +265,37 @@ public class AppBlock extends HtmlBlock {
     overviewTable.__("AM container Node Label expression:",
         app.getAmNodeLabelExpression() == null ? "<Not set>"
             : app.getAmNodeLabelExpression());
+
+    try {
+      final GetApplicationAttemptsRequest request =
+          GetApplicationAttemptsRequest.newInstance(appID);
+      if (callerUGI == null) {
+        attempts = appBaseProt.getApplicationAttempts(request)
+            .getApplicationAttemptList();
+      } else {
+        attempts = callerUGI.doAs(
+            new PrivilegedExceptionAction<Collection<ApplicationAttemptReport>> () {
+          @Override
+          public Collection<ApplicationAttemptReport> run() throws Exception {
+            return appBaseProt.getApplicationAttempts(request)
+                .getApplicationAttemptList();
+          }
+        });
+      }
+    } catch (Exception e) {
+      String message =
+          "Failed to read the attempts of the application " + appID + ".";
+      LOG.error(message, e);
+      html.p().__(message).__();
+      return;
+    }
+
+    createApplicationMetricsTable(html);
+
+    html.__(InfoBlock.class);
+
+    generateApplicationTable(html, callerUGI, attempts);
+
   }
 
   protected void generateApplicationTable(Block html,

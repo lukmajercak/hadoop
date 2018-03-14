@@ -34,8 +34,6 @@ import static org.junit.Assert.*;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.junit.Assert;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -56,6 +54,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @SuppressWarnings("unchecked")
 public class TestFileOutputCommitter {
@@ -67,8 +67,8 @@ public class TestFileOutputCommitter {
   private final static String SUB_DIR = "SUB_DIR";
   private final static Path OUT_SUB_DIR = new Path(outDir, SUB_DIR);
 
-  private static final Log LOG =
-      LogFactory.getLog(TestFileOutputCommitter.class);
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestFileOutputCommitter.class);
 
   // A random task attempt id for testing.
   private static final String attempt = "attempt_200707121733_0001_m_000000_0";
@@ -255,13 +255,18 @@ public class TestFileOutputCommitter {
     assert(dataFileFound && indexFileFound);
   }
 
-  private void testCommitterInternal(int version) throws Exception {
+  private void testCommitterInternal(int version, boolean taskCleanup)
+      throws Exception {
     Job job = Job.getInstance();
     FileOutputFormat.setOutputPath(job, outDir);
     Configuration conf = job.getConfiguration();
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, attempt);
-    conf.setInt(FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION,
+    conf.setInt(
+        FileOutputCommitter.FILEOUTPUTCOMMITTER_ALGORITHM_VERSION,
         version);
+    conf.setBoolean(
+        FileOutputCommitter.FILEOUTPUTCOMMITTER_TASK_CLEANUP_ENABLED,
+        taskCleanup);
     JobContext jContext = new JobContextImpl(conf, taskID.getJobID());
     TaskAttemptContext tContext = new TaskAttemptContextImpl(conf, taskID);
     FileOutputCommitter committer = new FileOutputCommitter(outDir, tContext);
@@ -275,9 +280,30 @@ public class TestFileOutputCommitter {
     RecordWriter theRecordWriter = theOutputFormat.getRecordWriter(tContext);
     writeOutput(theRecordWriter, tContext);
 
+    // check task and job temp directories exist
+    File jobOutputDir = new File(
+        new Path(outDir, FileOutputCommitter.PENDING_DIR_NAME).toString());
+    File taskOutputDir = new File(Path.getPathWithoutSchemeAndAuthority(
+        committer.getWorkPath()).toString());
+    assertTrue("job temp dir does not exist", jobOutputDir.exists());
+    assertTrue("task temp dir does not exist", taskOutputDir.exists());
+
     // do commit
     committer.commitTask(tContext);
+    assertTrue("job temp dir does not exist", jobOutputDir.exists());
+    if (version == 1 || taskCleanup) {
+      // Task temp dir gets renamed in v1 and deleted if taskCleanup is
+      // enabled in v2
+      assertFalse("task temp dir still exists", taskOutputDir.exists());
+    } else {
+      // By default, in v2 the task temp dir is only deleted during commitJob
+      assertTrue("task temp dir does not exist", taskOutputDir.exists());
+    }
+
+    // Entire job temp directory gets deleted, including task temp dir
     committer.commitJob(jContext);
+    assertFalse("job temp dir still exists", jobOutputDir.exists());
+    assertFalse("task temp dir still exists", taskOutputDir.exists());
 
     // validate output
     validateContent(outDir);
@@ -286,12 +312,17 @@ public class TestFileOutputCommitter {
 
   @Test
   public void testCommitterV1() throws Exception {
-    testCommitterInternal(1);
+    testCommitterInternal(1, false);
   }
 
   @Test
   public void testCommitterV2() throws Exception {
-    testCommitterInternal(2);
+    testCommitterInternal(2, false);
+  }
+
+  @Test
+  public void testCommitterV2TaskCleanupEnabled() throws Exception {
+    testCommitterInternal(2, true);
   }
 
   @Test

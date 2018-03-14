@@ -143,6 +143,10 @@ public class TestYarnConfigurationFields extends TestConfigurationFieldsBase {
     // Used as Java command line properties, not XML
     configurationPrefixToSkipCompare.add("yarn.app.container");
 
+    // Ignore default file name for resource profiles
+    configurationPropsToSkipCompare
+        .add(YarnConfiguration.DEFAULT_RM_RESOURCE_PROFILES_SOURCE_FILE);
+
     // Ignore NodeManager "work in progress" variables
     configurationPrefixToSkipCompare
         .add(YarnConfiguration.NM_NETWORK_RESOURCE_ENABLED);
@@ -155,9 +159,13 @@ public class TestYarnConfigurationFields extends TestConfigurationFieldsBase {
     configurationPrefixToSkipCompare
         .add(YarnConfiguration.NM_DISK_RESOURCE_ENABLED);
     configurationPrefixToSkipCompare
-        .add(YarnConfiguration.NM_MEMORY_RESOURCE_PREFIX);
-    configurationPrefixToSkipCompare
         .add(YarnConfiguration.NM_CPU_RESOURCE_ENABLED);
+    configurationPrefixToSkipCompare.add(
+        YarnConfiguration.NM_NETWORK_TAG_MAPPING_MANAGER);
+    configurationPrefixToSkipCompare.add(
+        YarnConfiguration.NM_NETWORK_TAG_MAPPING_FILE_PATH);
+    configurationPrefixToSkipCompare.add(
+        YarnConfiguration.NM_NETWORK_TAG_PREFIX);
 
     // Ignore all Router Federation variables
 

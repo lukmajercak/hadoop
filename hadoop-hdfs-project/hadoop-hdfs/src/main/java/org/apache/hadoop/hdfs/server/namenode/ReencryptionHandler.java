@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -45,11 +44,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -112,8 +111,7 @@ public class ReencryptionHandler implements Runnable {
   private ExecutorCompletionService<ReencryptionTask> batchService;
   private BlockingQueue<Runnable> taskQueue;
   // protected by ReencryptionHandler object lock
-  private final Map<Long, ZoneSubmissionTracker> submissions =
-      new ConcurrentHashMap<>();
+  private final Map<Long, ZoneSubmissionTracker> submissions = new HashMap<>();
 
   // The current batch that the handler is working on. Handler is designed to
   // be single-threaded, see class javadoc for more details.
@@ -132,8 +130,10 @@ public class ReencryptionHandler implements Runnable {
    */
   void stopThreads() {
     assert dir.hasWriteLock();
-    for (ZoneSubmissionTracker zst : submissions.values()) {
-      zst.cancelAllTasks();
+    synchronized (this) {
+      for (ZoneSubmissionTracker zst : submissions.values()) {
+        zst.cancelAllTasks();
+      }
     }
     if (updaterExecutor != null) {
       updaterExecutor.shutdownNow();
@@ -269,33 +269,34 @@ public class ReencryptionHandler implements Runnable {
       throw new IOException("Zone " + zoneName + " is not under re-encryption");
     }
     zs.cancel();
-    ZoneSubmissionTracker zst = submissions.get(zoneId);
-    if (zst != null) {
-      zst.cancelAllTasks();
-    }
+    removeZoneTrackerStopTasks(zoneId);
   }
 
   void removeZone(final long zoneId) {
     assert dir.hasWriteLock();
     LOG.info("Removing zone {} from re-encryption.", zoneId);
-    ZoneSubmissionTracker zst = submissions.get(zoneId);
-    if (zst != null) {
-      zst.cancelAllTasks();
-    }
-    submissions.remove(zoneId);
+    removeZoneTrackerStopTasks(zoneId);
     getReencryptionStatus().removeZone(zoneId);
   }
 
+  synchronized private void removeZoneTrackerStopTasks(final long zoneId) {
+    final ZoneSubmissionTracker zst = submissions.get(zoneId);
+    if (zst != null) {
+      zst.cancelAllTasks();
+      submissions.remove(zoneId);
+    }
+  }
+
   ZoneSubmissionTracker getTracker(final long zoneId) {
-    dir.hasReadLock();
+    assert dir.hasReadLock();
     return unprotectedGetTracker(zoneId);
   }
 
   /**
-   * get the tracker without holding the FSDirectory lock. This is only used for
-   * testing, when updater checks about pausing.
+   * Get the tracker without holding the FSDirectory lock.
+   * The submissions object is protected by object lock.
    */
-  ZoneSubmissionTracker unprotectedGetTracker(final long zoneId) {
+  synchronized ZoneSubmissionTracker unprotectedGetTracker(final long zoneId) {
     return submissions.get(zoneId);
   }
 
@@ -308,16 +309,19 @@ public class ReencryptionHandler implements Runnable {
    *
    * @param zoneId
    */
-  void addDummyTracker(final long zoneId) {
+  void addDummyTracker(final long zoneId, ZoneSubmissionTracker zst) {
     assert dir.hasReadLock();
-    assert !submissions.containsKey(zoneId);
-    final ZoneSubmissionTracker zst = new ZoneSubmissionTracker();
+    if (zst == null) {
+      zst = new ZoneSubmissionTracker();
+    }
     zst.setSubmissionDone();
 
-    Future future = batchService.submit(
+    final Future future = batchService.submit(
         new EDEKReencryptCallable(zoneId, new ReencryptionBatch(), this));
     zst.addTask(future);
-    submissions.put(zoneId, zst);
+    synchronized (this) {
+      submissions.put(zoneId, zst);
+    }
   }
 
   /**
@@ -351,6 +355,8 @@ public class ReencryptionHandler implements Runnable {
         }
         LOG.info("Executing re-encrypt commands on zone {}. Current zones:{}",
             zoneId, getReencryptionStatus());
+        getReencryptionStatus().markZoneStarted(zoneId);
+        resetSubmissionTracker(zoneId);
       } finally {
         dir.readUnlock();
       }
@@ -392,7 +398,6 @@ public class ReencryptionHandler implements Runnable {
 
     readLock();
     try {
-      getReencryptionStatus().markZoneStarted(zoneId);
       zoneNode = dir.getInode(zoneId);
       // start re-encrypting the zone from the beginning
       if (zoneNode == null) {
@@ -428,6 +433,20 @@ public class ReencryptionHandler implements Runnable {
     }
   }
 
+  /**
+   * Reset the zone submission tracker for re-encryption.
+   * @param zoneId
+   */
+  synchronized private void resetSubmissionTracker(final long zoneId) {
+    ZoneSubmissionTracker zst = submissions.get(zoneId);
+    if (zst == null) {
+      zst = new ZoneSubmissionTracker();
+      submissions.put(zoneId, zst);
+    } else {
+      zst.reset();
+    }
+  }
+
   List<XAttr> completeReencryption(final INode zoneNode) throws IOException {
     assert dir.hasWriteLock();
     assert dir.getFSNamesystem().hasWriteLock();
@@ -437,8 +456,9 @@ public class ReencryptionHandler implements Runnable {
     LOG.info("Re-encryption completed on zone {}. Re-encrypted {} files,"
             + " failures encountered: {}.", zoneNode.getFullPathName(),
         zs.getFilesReencrypted(), zs.getNumReencryptionFailures());
-    // This also removes the zone from reencryptionStatus
-    submissions.remove(zoneId);
+    synchronized (this) {
+      submissions.remove(zoneId);
+    }
     return FSDirEncryptionZoneOp
         .updateReencryptionFinish(dir, INodesInPath.fromINode(zoneNode), zs);
   }
@@ -562,10 +582,13 @@ public class ReencryptionHandler implements Runnable {
     if (currentBatch.isEmpty()) {
       return;
     }
-    ZoneSubmissionTracker zst = submissions.get(zoneId);
-    if (zst == null) {
-      zst = new ZoneSubmissionTracker();
-      submissions.put(zoneId, zst);
+    ZoneSubmissionTracker zst;
+    synchronized (this) {
+      zst = submissions.get(zoneId);
+      if (zst == null) {
+        zst = new ZoneSubmissionTracker();
+        submissions.put(zoneId, zst);
+      }
     }
     Future future = batchService
         .submit(new EDEKReencryptCallable(zoneId, currentBatch, this));
@@ -648,7 +671,7 @@ public class ReencryptionHandler implements Runnable {
       if (batch.isEmpty()) {
         return new ReencryptionTask(zoneNodeId, 0, batch);
       }
-      final Stopwatch kmsSW = new Stopwatch().start();
+      final StopWatch kmsSW = new StopWatch().start();
 
       int numFailures = 0;
       String result = "Completed";
@@ -821,19 +844,13 @@ public class ReencryptionHandler implements Runnable {
     // 2. if tasks are piling up on the updater, don't create new callables
     // until the queue size goes down.
     final int maxTasksPiled = Runtime.getRuntime().availableProcessors() * 2;
-    int totalTasks = 0;
-    for (ZoneSubmissionTracker zst : submissions.values()) {
-      totalTasks += zst.getTasks().size();
-    }
-    if (totalTasks >= maxTasksPiled) {
+    int numTasks = numTasksSubmitted();
+    if (numTasks >= maxTasksPiled) {
       LOG.debug("Re-encryption handler throttling because total tasks pending"
-          + " re-encryption updater is {}", totalTasks);
-      while (totalTasks >= maxTasksPiled) {
+          + " re-encryption updater is {}", numTasks);
+      while (numTasks >= maxTasksPiled) {
         Thread.sleep(500);
-        totalTasks = 0;
-        for (ZoneSubmissionTracker zst : submissions.values()) {
-          totalTasks += zst.getTasks().size();
-        }
+        numTasks = numTasksSubmitted();
       }
     }
 
@@ -864,6 +881,14 @@ public class ReencryptionHandler implements Runnable {
     throttleTimerLocked.reset();
   }
 
+  private synchronized int numTasksSubmitted() {
+    int ret = 0;
+    for (ZoneSubmissionTracker zst : submissions.values()) {
+      ret += zst.getTasks().size();
+    }
+    return ret;
+  }
+
   /**
    * Process an Inode for re-encryption. Add to current batch if it's a file,
    * no-op otherwise.
@@ -877,7 +902,7 @@ public class ReencryptionHandler implements Runnable {
    */
   private boolean reencryptINode(final INode inode, final String ezKeyVerName)
       throws IOException, InterruptedException {
-    dir.hasReadLock();
+    assert dir.hasReadLock();
     if (LOG.isTraceEnabled()) {
       LOG.trace("Processing {} for re-encryption", inode.getFullPathName());
     }

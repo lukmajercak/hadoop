@@ -50,7 +50,7 @@ The HTTP REST API supports the complete [FileSystem](../../api/org/apache/hadoop
     * [`CHECKACCESS`](#Check_access) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).access)
     * [`GETALLSTORAGEPOLICY`](#Get_all_Storage_Policies) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getAllStoragePolicies)
     * [`GETSTORAGEPOLICY`](#Get_Storage_Policy) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getStoragePolicy)
-    * [`GETFILEBLOCKLOCATIONS`](#Get_File_Block_Locations) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileBlockLocations)
+    * [`GETSNAPSHOTDIFF`](#Get_Snapshot_Diff)
 *   HTTP PUT
     * [`CREATE`](#Create_and_Write_to_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).create)
     * [`MKDIRS`](#Make_a_Directory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).mkdirs)
@@ -441,6 +441,7 @@ See also: [`newlength`](#New_Length), [FileSystem](../../api/org/apache/hadoop/f
             "pathSuffix"      : "",
             "permission"      : "777",
             "replication"     : 0,
+            "snapshotEnabled" : true
             "type"            : "DIRECTORY"    //enum {FILE, DIRECTORY, SYMLINK}
           }
         }
@@ -467,6 +468,8 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileSt
               {
                 "accessTime"      : 1320171722771,
                 "blockSize"       : 33554432,
+                "childrenNum"     : 0,
+                "fileId"          : 16388,
                 "group"           : "supergroup",
                 "length"          : 24930,
                 "modificationTime": 1320171722771,
@@ -474,11 +477,14 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileSt
                 "pathSuffix"      : "a.patch",
                 "permission"      : "644",
                 "replication"     : 1,
+                "storagePolicy"   : 0,
                 "type"            : "FILE"
               },
               {
                 "accessTime"      : 0,
                 "blockSize"       : 0,
+                "childrenNum"     : 0,
+                "fileId"          : 16389,
                 "group"           : "supergroup",
                 "length"          : 0,
                 "modificationTime": 1320895981256,
@@ -486,6 +492,7 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileSt
                 "pathSuffix"      : "bar",
                 "permission"      : "711",
                 "replication"     : 0,
+                "snapshotEnabled" : true
                 "type"            : "DIRECTORY"
               },
               ...
@@ -1069,7 +1076,7 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).unsetStor
         {
             "BlockStoragePolicy": {
                 "copyOnCreateFile": false,
-                "creationFallbacks": [],
+               "creationFallbacks": [],
                 "id":7,
                 "name":"HOT",
                 "replicationFallbacks":["ARCHIVE"],
@@ -1078,51 +1085,6 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).unsetStor
         }
 
 See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getStoragePolicy
-
-### Get File Block Locations
-
-* Submit a HTTP GET request.
-
-        curl -i "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=GETFILEBLOCKLOCATIONS
-
-    The client receives a response with a [`BlockLocations` JSON Object](#Block_Locations_JSON_Schema):
-
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Transfer-Encoding: chunked
-
-        {
-          "BlockLocations" :
-          {
-            "BlockLocation":
-            [
-              {
-                "cachedHosts" : [],
-                "corrupt" : false,
-                "hosts" : ["host"],
-                "length" : 134217728,                             // length of this block
-                "names" : ["host:ip"],
-                "offset" : 0,                                     // offset of the block in the file
-                "storageIds" : ["storageid"],
-                "storageTypes" : ["DISK"],                        // enum {RAM_DISK, SSD, DISK, ARCHIVE}
-                "topologyPaths" : ["/default-rack/hostname:ip"]
-              }, {
-                "cachedHosts" : [],
-                "corrupt" : false,
-                "hosts" : ["host"],
-                "length" : 62599364,
-                "names" : ["host:ip"],
-                "offset" : 134217728,
-                "storageIds" : ["storageid"],
-                "storageTypes" : ["DISK"],
-                "topologyPaths" : ["/default-rack/hostname:ip"]
-              },
-              ...
-            ]
-          }
-        }
-
-See also: [`offset`](#Offset), [`length`](#Length), [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileBlockLocations
 
 Extended Attributes(XAttrs) Operations
 --------------------------------------
@@ -1304,6 +1266,21 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).deleteSna
         Content-Length: 0
 
 See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).renameSnapshot
+
+### Get Snapshot Diff
+
+* Submit a HTTP GET request.
+
+        curl -i GET "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=GETSNAPSHOTDIFF
+                           &oldsnapshotname=<SNAPSHOTNAME>&snapshotname=<SNAPSHOTNAME>"
+
+    The client receives a response with a [`SnapshotDiffReport` JSON object](#SnapshotDiffReport_JSON_Schema):
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Transfer-Encoding: chunked
+
+        {"SnapshotDiffReport":{"diffList":[],"fromSnapshot":"s3","snapshotRoot":"/foo","toSnapshot":"s4"}}
 
 Delegation Token Operations
 ---------------------------
@@ -2082,25 +2059,43 @@ A `BlockStoragePolicies` JSON object represents an array of `BlockStoragePolicy`
 }
 ```
 
-#### BlockLocations JSON Schema
-
-A `BlockLocations` JSON object represents an array of `BlockLocation` JSON objects.
+### SnapshotDiffReport JSON Schema
 
 ```json
 {
-  "name"      : "BlockLocations",
+  "name": "SnapshotDiffReport",
+  "type": "object",
   "properties":
   {
-    "BlockLocations":
+    "SnapshotDiffReport":
     {
-      "type"      : "object",
-      "properties":
+      "type"        : "object",
+      "properties"  :
       {
-        "BlockLocation":
+        "diffList":
         {
-          "description": "An array of BlockLocation",
-          "type"       : "array",
-          "items"      : blockLocationProperties      //See BlockLocation Properties
+          "description": "An array of DiffReportEntry",
+          "type"        : "array",
+          "items"       : diffReportEntries,
+          "required"    : true
+        },
+        "fromSnapshot":
+        {
+          "description": "Source snapshot",
+          "type"        : "string",
+          "required"    : true
+        },
+        "snapshotRoot":
+        {
+          "description" : "String representation of snapshot root path",
+          "type"        : "string",
+          "required"    : true
+        },
+        "toSnapshot":
+        {
+          "description" : "Destination snapshot",
+          "type"        : "string",
+          "required"    : true
         }
       }
     }
@@ -2108,118 +2103,36 @@ A `BlockLocations` JSON object represents an array of `BlockLocation` JSON objec
 }
 ```
 
-See also [`BlockLocation` Properties](#BlockLocation_Properties), [`GETFILEBLOCKLOCATIONS`](#Get_File_Block_Locations), [BlockLocation](../../api/org/apache/hadoop/fs/BlockLocation.html)
+#### DiffReport Entries
 
-### BlockLocation JSON Schema
-
-```json
-{
-  "name"      : "BlockLocation",
-  "properties":
-  {
-    "BlockLocation": blockLocationProperties      //See BlockLocation Properties
-  }
-}
-```
-
-See also [`BlockLocation` Properties](#BlockLocation_Properties), [`GETFILEBLOCKLOCATIONS`](#Get_File_Block_Locations), [BlockLocation](../../api/org/apache/hadoop/fs/BlockLocation.html)
-
-#### BlockLocation Properties
-
-JavaScript syntax is used to define `blockLocationProperties` so that it can be referred in both `BlockLocation` and `BlockLocations` JSON schemas.
+JavaScript syntax is used to define `diffReportEntries` so that it can be referred in `SnapshotDiffReport` JSON schema.
 
 ```javascript
-var blockLocationProperties =
+var diffReportEntries =
 {
-  "type"      : "object",
+  "type": "object",
   "properties":
   {
-    "cachedHosts":
+    "sourcePath":
     {
-      "description": "Datanode hostnames with a cached replica",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "A datanode hostname",
-        "type"       : "string"
-      }
+      "description" : "Source path name relative to snapshot root",
+      "type"        : "string",
+      "required"    : true
     },
-    "corrupt":
+    "targetPath":
     {
-      "description": "True if the block is corrupted",
-      "type"       : "boolean",
-      "required"   : "true"
+      "description" : "Target path relative to snapshot root used for renames",
+      "type"        : "string",
+      "required"    : true
     },
-    "hosts":
+    "type":
     {
-      "description": "Datanode hostnames store the block",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "A datanode hostname",
-        "type"       : "string"
-      }
-    },
-    "length":
-    {
-      "description": "Length of the block",
-      "type"       : "integer",
-      "required"   : "true"
-    },
-    "names":
-    {
-      "description": "Datanode IP:xferPort for accessing the block",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "DatanodeIP:xferPort",
-        "type"       : "string"
-      }
-    },
-    "offset":
-    {
-      "description": "Offset of the block in the file",
-      "type"       : "integer",
-      "required"   : "true"
-    },
-    "storageIds":
-    {
-      "description": "Storage ID of each replica",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "Storage ID",
-        "type"       : "string"
-      }
-    },
-    "storageTypes":
-    {
-      "description": "Storage type of each replica",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "Storage type",
-        "enum"       : ["RAM_DISK", "SSD", "DISK", "ARCHIVE"]
-      }
-    },
-    "topologyPaths":
-    {
-      "description": "Datanode addresses in network topology",
-      "type"       : "array",
-      "required"   : "true",
-      "items"      :
-      {
-        "description": "/rack/host:ip",
-        "type"       : "string"
-      }
+      "description" : "Type of diff report entry",
+      "enum"        : ["CREATE", "MODIFY", "DELETE", "RENAME"],
+      "required"    : true
     }
   }
-};
+}
 ```
 
 HTTP Query Parameter Dictionary

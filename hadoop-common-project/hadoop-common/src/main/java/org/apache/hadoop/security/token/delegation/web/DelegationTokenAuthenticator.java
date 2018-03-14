@@ -18,8 +18,10 @@
 package org.apache.hadoop.security.token.delegation.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
@@ -54,6 +56,9 @@ public abstract class DelegationTokenAuthenticator implements Authenticator {
   private static final String CONTENT_TYPE = "Content-Type";
   private static final String APPLICATION_JSON_MIME = "application/json";
 
+  private static final ObjectReader READER =
+      new ObjectMapper().readerFor(Map.class);
+
   private static final String HTTP_GET = "GET";
   private static final String HTTP_PUT = "PUT";
 
@@ -66,6 +71,7 @@ public abstract class DelegationTokenAuthenticator implements Authenticator {
   public static final String DELEGATION_PARAM = "delegation";
   public static final String TOKEN_PARAM = "token";
   public static final String RENEWER_PARAM = "renewer";
+  public static final String SERVICE_PARAM = "service";
   public static final String DELEGATION_TOKEN_JSON = "Token";
   public static final String DELEGATION_TOKEN_URL_STRING_JSON = "urlString";
   public static final String RENEW_DELEGATION_TOKEN_JSON = "long";
@@ -133,11 +139,17 @@ public abstract class DelegationTokenAuthenticator implements Authenticator {
   public void authenticate(URL url, AuthenticatedURL.Token token)
       throws IOException, AuthenticationException {
     if (!hasDelegationToken(url, token)) {
-      // check and renew TGT to handle potential expiration
-      UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab();
-      LOG.debug("No delegation token found for url={}, token={}, authenticating"
-          + " with {}", url, token, authenticator.getClass());
-      authenticator.authenticate(url, token);
+      try {
+        // check and renew TGT to handle potential expiration
+        UserGroupInformation.getCurrentUser().checkTGTAndReloginFromKeytab();
+        LOG.debug("No delegation token found for url={}, token={}, "
+            + "authenticating with {}", url, token, authenticator.getClass());
+        authenticator.authenticate(url, token);
+      } catch (IOException ex) {
+        throw NetUtils.wrapException(url.getHost(), url.getPort(),
+            null, 0, ex);
+      }
+
     } else {
       LOG.debug("Authenticated from delegation token. url={}, token={}",
           url, token);
@@ -316,8 +328,7 @@ public abstract class DelegationTokenAuthenticator implements Authenticator {
         if (contentType != null &&
             contentType.contains(APPLICATION_JSON_MIME)) {
           try {
-            ObjectMapper mapper = new ObjectMapper();
-            ret = mapper.readValue(conn.getInputStream(), Map.class);
+            ret = READER.readValue(conn.getInputStream());
           } catch (Exception ex) {
             throw new AuthenticationException(String.format(
                 "'%s' did not handle the '%s' delegation token operation: %s",

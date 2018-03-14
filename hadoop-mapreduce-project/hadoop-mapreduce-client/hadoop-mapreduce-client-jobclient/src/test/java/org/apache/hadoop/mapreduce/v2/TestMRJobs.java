@@ -36,8 +36,6 @@ import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.FailingMapper;
 import org.apache.hadoop.RandomTextWriterJob;
 import org.apache.hadoop.RandomTextWriterJob.RandomInputFormat;
@@ -104,10 +102,12 @@ import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestMRJobs {
 
-  private static final Log LOG = LogFactory.getLog(TestMRJobs.class);
+  private static final Logger LOG = LoggerFactory.getLogger(TestMRJobs.class);
   private static final EnumSet<RMAppState> TERMINAL_RM_APP_STATES =
       EnumSet.of(RMAppState.FINISHED, RMAppState.FAILED, RMAppState.KILLED);
   private static final int NUM_NODE_MGRS = 3;
@@ -1296,6 +1296,65 @@ public class TestMRJobs {
     in.close();
     jos.closeEntry();
     jarFile.delete();
+  }
+
+  @Test
+  public void testSharedCache() throws Exception {
+    Path localJobJarPath = makeJobJarWithLib(TEST_ROOT_DIR.toUri().toString());
+
+    if (!(new File(MiniMRYarnCluster.APPJAR)).exists()) {
+      LOG.info("MRAppJar " + MiniMRYarnCluster.APPJAR
+          + " not found. Not running test.");
+      return;
+    }
+
+    Job job = Job.getInstance(mrCluster.getConfig());
+
+    Configuration jobConf = job.getConfiguration();
+    jobConf.set(MRJobConfig.SHARED_CACHE_MODE, "enabled");
+
+    Path inputFile = createTempFile("input-file", "x");
+
+    // Create jars with a single file inside them.
+    Path second = makeJar(new Path(TEST_ROOT_DIR, "distributed.second.jar"), 2);
+    Path third = makeJar(new Path(TEST_ROOT_DIR, "distributed.third.jar"), 3);
+    Path fourth = makeJar(new Path(TEST_ROOT_DIR, "distributed.fourth.jar"), 4);
+
+    // Add libjars to job conf
+    jobConf.set("tmpjars", second.toString() + "," + third.toString() + ","
+        + fourth.toString());
+
+    // Because the job jar is a "dummy" jar, we need to include the jar with
+    // DistributedCacheChecker or it won't be able to find it
+    Path distributedCacheCheckerJar =
+        new Path(JarFinder.getJar(SharedCacheChecker.class));
+    job.addFileToClassPath(distributedCacheCheckerJar.makeQualified(
+        localFs.getUri(), distributedCacheCheckerJar.getParent()));
+
+    job.setMapperClass(SharedCacheChecker.class);
+    job.setOutputFormatClass(NullOutputFormat.class);
+
+    FileInputFormat.setInputPaths(job, inputFile);
+
+    job.setMaxMapAttempts(1); // speed up failures
+
+    job.submit();
+    String trackingUrl = job.getTrackingURL();
+    String jobId = job.getJobID().toString();
+    Assert.assertTrue(job.waitForCompletion(true));
+    Assert.assertTrue("Tracking URL was " + trackingUrl
+        + " but didn't Match Job ID " + jobId,
+        trackingUrl.endsWith(jobId.substring(jobId.lastIndexOf("_")) + "/"));
+  }
+
+  /**
+   * An identity mapper for testing the shared cache.
+   */
+  public static class SharedCacheChecker extends
+      Mapper<LongWritable, Text, NullWritable, NullWritable> {
+    @Override
+    public void setup(Context context) throws IOException {
+    }
   }
 
   public static class ConfVerificationMapper extends SleepMapper {

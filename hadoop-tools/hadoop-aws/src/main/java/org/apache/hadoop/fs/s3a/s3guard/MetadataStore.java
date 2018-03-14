@@ -21,6 +21,7 @@ package org.apache.hadoop.fs.s3a.s3guard;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -33,6 +34,9 @@ import org.apache.hadoop.fs.Path;
  * {@code MetadataStore} defines the set of operations that any metadata store
  * implementation must provide.  Note that all {@link Path} objects provided
  * to methods must be absolute, not relative paths.
+ * Implementations must implement any retries needed internally, such that
+ * transient errors are generally recovered from without throwing exceptions
+ * from this API.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
@@ -218,4 +222,20 @@ public interface MetadataStore extends Closeable {
    * @throws UnsupportedOperationException if not implemented
    */
   void prune(long modTime) throws IOException, UnsupportedOperationException;
+
+  /**
+   * Get any diagnostics information from a store, as a list of (key, value)
+   * tuples for display. Arbitrary values; no guarantee of stability.
+   * These are for debugging only.
+   * @return a map of strings.
+   * @throws IOException if there is an error
+   */
+  Map<String, String> getDiagnostics() throws IOException;
+
+  /**
+   * Tune/update parameters for an existing table.
+   * @param parameters map of params to change.
+   * @throws IOException if there is an error
+   */
+  void updateParameters(Map<String, String> parameters) throws IOException;
 }

@@ -87,6 +87,8 @@ public class IndexedFileAggregatedLogsBlock extends LogAggregationHtmlBlock {
     String logEntity = params.getLogEntity();
     long start = params.getStartIndex();
     long end = params.getEndIndex();
+    long startTime = params.getStartTime();
+    long endTime = params.getEndTime();
 
     List<FileStatus> nodeFiles = null;
     try {
@@ -101,10 +103,9 @@ public class IndexedFileAggregatedLogsBlock extends LogAggregationHtmlBlock {
       return;
     }
 
-    Map<String, FileStatus> checkSumFiles;
+    Map<String, Long> checkSumFiles;
     try {
-      checkSumFiles = fileController.filterFiles(nodeFiles,
-          LogAggregationIndexedFileController.CHECK_SUM_FILE_SUFFIX);
+      checkSumFiles = fileController.parseCheckSumFiles(nodeFiles);
     } catch (IOException ex) {
       LOG.error("Error getting logs for " + logEntity, ex);
       html.h1("Error getting logs for " + logEntity);
@@ -125,17 +126,16 @@ public class IndexedFileAggregatedLogsBlock extends LogAggregationHtmlBlock {
     String desiredLogType = $(CONTAINER_LOG_TYPE);
     try {
       for (FileStatus thisNodeFile : fileToRead) {
-        FileStatus checkSum = fileController.getAllChecksumFiles(
-            checkSumFiles, thisNodeFile.getPath().getName());
+        Long checkSumIndex = checkSumFiles.get(
+            thisNodeFile.getPath().getName());
         long endIndex = -1;
-        if (checkSum != null) {
-          endIndex = fileController.loadIndexedLogsCheckSum(
-             checkSum.getPath());
+        if (checkSumIndex != null) {
+          endIndex = checkSumIndex.longValue();
         }
         IndexedLogsMeta indexedLogsMeta = null;
         try {
           indexedLogsMeta = fileController.loadIndexedLogsMeta(
-              thisNodeFile.getPath(), endIndex);
+              thisNodeFile.getPath(), endIndex, appId);
         } catch (Exception ex) {
           // DO NOTHING
           LOG.warn("Can not load log meta from the log file:"
@@ -187,6 +187,10 @@ public class IndexedFileAggregatedLogsBlock extends LogAggregationHtmlBlock {
         FSDataInputStream fsin = fileContext.open(thisNodeFile.getPath());
         int bufferSize = 65536;
         for (IndexedFileLogMeta candidate : candidates) {
+          if (candidate.getLastModificatedTime() < startTime
+              || candidate.getLastModificatedTime() > endTime) {
+            continue;
+          }
           byte[] cbuf = new byte[bufferSize];
           InputStream in = null;
           try {
@@ -219,12 +223,13 @@ public class IndexedFileAggregatedLogsBlock extends LogAggregationHtmlBlock {
               html.p().__("Showing " + toRead + " bytes of " + logLength
                   + " total. Click ").a(url("logs", $(NM_NODENAME),
                       $(CONTAINER_ID), $(ENTITY_STRING), $(APP_OWNER),
-                      candidate.getFileName(), "?start=0"), "here").
+                      candidate.getFileName(), "?start=0&start.time="
+                      + startTime + "&end.time=" + endTime), "here").
                       __(" for the full log.").__();
             }
             long totalSkipped = 0;
-            while (totalSkipped < start) {
-              long ret = in.skip(start - totalSkipped);
+            while (totalSkipped < startIndex) {
+              long ret = in.skip(startIndex - totalSkipped);
               if (ret == 0) {
                 //Read one byte
                 int nextByte = in.read();

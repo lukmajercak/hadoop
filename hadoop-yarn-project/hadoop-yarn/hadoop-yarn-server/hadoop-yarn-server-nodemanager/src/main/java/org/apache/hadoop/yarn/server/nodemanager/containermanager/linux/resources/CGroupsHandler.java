@@ -54,7 +54,7 @@ public interface CGroupsHandler {
       this.name = name;
     }
 
-    String getName() {
+    public String getName() {
       return name;
     }
 
@@ -111,6 +111,13 @@ public interface CGroupsHandler {
    */
   void deleteCGroup(CGroupController controller, String cGroupId) throws
       ResourceHandlerException;
+
+  /**
+   * Gets the absolute path to the specified cgroup controller.
+   * @param controller - controller type for the cgroup
+   * @return the root of the controller.
+   */
+  String getControllerPath(CGroupController controller);
 
   /**
    * Gets the relative path for the cgroup, independent of a controller, for a
@@ -173,4 +180,10 @@ public interface CGroupsHandler {
    */
   String getCGroupParam(CGroupController controller, String cGroupId,
       String param) throws ResourceHandlerException;
+
+  /**
+   * Returns CGroup Mount Path.
+   * @return parameter value as read from the parameter file
+   */
+  String getCGroupMountPath();
 }

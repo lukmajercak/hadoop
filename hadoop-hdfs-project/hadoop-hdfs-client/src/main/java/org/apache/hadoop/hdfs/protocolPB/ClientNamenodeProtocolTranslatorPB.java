@@ -50,7 +50,7 @@ import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.hdfs.inotify.EventBatchList;
-import org.apache.hadoop.hdfs.protocol.AddECPolicyResponse;
+import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
@@ -64,20 +64,25 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.ReencryptAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.ReplicatedBlockStats;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.ZoneReencryptionStatus;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
+import org.apache.hadoop.hdfs.protocol.SnapshotDiffReportListing;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos.GetAclStatusRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos.GetAclStatusResponseProto;
@@ -127,11 +132,15 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLin
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLinkTargetResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetListingRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetListingResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLocatedFileInfoRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetLocatedFileInfoResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetPreferredBlockSizeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetQuotaUsageRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetServerDefaultsRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportListingRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshotDiffReportListingResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshottableDirListingRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSnapshottableDirListingResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePoliciesRequestProto;
@@ -868,10 +877,30 @@ public class ClientNamenodeProtocolTranslatorPB implements
   @Override
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     GetFileInfoRequestProto req = GetFileInfoRequestProto.newBuilder()
-        .setSrc(src).build();
+        .setSrc(src)
+        .build();
     try {
       GetFileInfoResponseProto res = rpcProxy.getFileInfo(null, req);
       return res.hasFs() ? PBHelperClient.convert(res.getFs()) : null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public HdfsLocatedFileStatus getLocatedFileInfo(String src,
+      boolean needBlockToken) throws IOException {
+    GetLocatedFileInfoRequestProto req =
+        GetLocatedFileInfoRequestProto.newBuilder()
+            .setSrc(src)
+            .setNeedBlockToken(needBlockToken)
+            .build();
+    try {
+      GetLocatedFileInfoResponseProto res =
+          rpcProxy.getLocatedFileInfo(null, req);
+      return (HdfsLocatedFileStatus) (res.hasFs()
+          ? PBHelperClient.convert(res.getFs())
+          : null);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
@@ -1197,6 +1226,27 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       GetSnapshotDiffReportResponseProto result =
           rpcProxy.getSnapshotDiffReport(null, req);
+
+      return PBHelperClient.convert(result.getDiffReport());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public SnapshotDiffReportListing getSnapshotDiffReportListing(
+      String snapshotRoot, String fromSnapshot, String toSnapshot,
+      byte[] startPath, int index) throws IOException {
+    GetSnapshotDiffReportListingRequestProto req =
+        GetSnapshotDiffReportListingRequestProto.newBuilder()
+            .setSnapshotRoot(snapshotRoot).setFromSnapshot(fromSnapshot)
+            .setToSnapshot(toSnapshot).setCursor(
+            HdfsProtos.SnapshotDiffReportCursorProto.newBuilder()
+                .setStartPath(PBHelperClient.getByteString(startPath))
+                .setIndex(index).build()).build();
+    try {
+      GetSnapshotDiffReportListingResponseProto result =
+          rpcProxy.getSnapshotDiffReportListing(null, req);
 
       return PBHelperClient.convert(result.getDiffReport());
     } catch (ServiceException e) {
@@ -1718,7 +1768,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public AddECPolicyResponse[] addErasureCodingPolicies(
+  public AddErasureCodingPolicyResponse[] addErasureCodingPolicies(
       ErasureCodingPolicy[] policies) throws IOException {
     List<ErasureCodingPolicyProto> protos = Arrays.stream(policies)
         .map(PBHelperClient::convertErasureCodingPolicy)
@@ -1729,9 +1779,10 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       AddErasureCodingPoliciesResponseProto rep = rpcProxy
           .addErasureCodingPolicies(null, req);
-      AddECPolicyResponse[] responses = rep.getResponsesList().stream()
-          .map(PBHelperClient::convertAddECPolicyResponse)
-          .toArray(AddECPolicyResponse[]::new);
+      AddErasureCodingPolicyResponse[] responses =
+          rep.getResponsesList().stream()
+              .map(PBHelperClient::convertAddErasureCodingPolicyResponse)
+              .toArray(AddErasureCodingPolicyResponse[]::new);
       return responses;
     }  catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
@@ -1781,17 +1832,17 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public ErasureCodingPolicy[] getErasureCodingPolicies() throws IOException {
+  public ErasureCodingPolicyInfo[] getErasureCodingPolicies()
+      throws IOException {
     try {
       GetErasureCodingPoliciesResponseProto response = rpcProxy
           .getErasureCodingPolicies(null, VOID_GET_EC_POLICIES_REQUEST);
-      ErasureCodingPolicy[] ecPolicies =
-          new ErasureCodingPolicy[response.getEcPoliciesCount()];
+      ErasureCodingPolicyInfo[] ecPolicies =
+          new ErasureCodingPolicyInfo[response.getEcPoliciesCount()];
       int i = 0;
-      for (ErasureCodingPolicyProto ecPolicyProto :
-          response.getEcPoliciesList()) {
+      for (ErasureCodingPolicyProto proto : response.getEcPoliciesList()) {
         ecPolicies[i++] =
-            PBHelperClient.convertErasureCodingPolicy(ecPolicyProto);
+            PBHelperClient.convertErasureCodingPolicyInfo(proto);
       }
       return ecPolicies;
     } catch (ServiceException e) {
@@ -1844,13 +1895,27 @@ public class ClientNamenodeProtocolTranslatorPB implements
     }
   }
 
+  @Deprecated
   @Override
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId)
       throws IOException {
-    ListOpenFilesRequestProto req =
-        ListOpenFilesRequestProto.newBuilder().setId(prevId).build();
+    return listOpenFiles(prevId, EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
+        OpenFilesIterator.FILTER_PATH_DEFAULT);
+  }
+
+  @Override
+  public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId,
+      EnumSet<OpenFilesType> openFilesTypes, String path) throws IOException {
+    ListOpenFilesRequestProto.Builder req =
+        ListOpenFilesRequestProto.newBuilder().setId(prevId);
+    if (openFilesTypes != null) {
+      req.addAllTypes(PBHelperClient.convertOpenFileTypes(openFilesTypes));
+    }
+    req.setPath(path);
+
     try {
-      ListOpenFilesResponseProto response = rpcProxy.listOpenFiles(null, req);
+      ListOpenFilesResponseProto response =
+          rpcProxy.listOpenFiles(null, req.build());
       List<OpenFileEntry> openFileEntries =
           Lists.newArrayListWithCapacity(response.getEntriesCount());
       for (OpenFilesBatchResponseProto p : response.getEntriesList()) {

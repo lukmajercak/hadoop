@@ -48,6 +48,10 @@ import org.apache.hadoop.yarn.ipc.RPCUtil;
 import org.apache.hadoop.yarn.security.AccessRequest;
 import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
+
+import org.apache.hadoop.yarn.server.resourcemanager.placement
+    .ApplicationPlacementContext;
+import org.apache.hadoop.yarn.server.resourcemanager.placement.PlacementManager;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.RMState;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.Recoverable;
@@ -70,6 +74,7 @@ import org.apache.hadoop.yarn.util.Times;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.SettableFuture;
+import org.apache.hadoop.yarn.util.StringHelper;
 
 /**
  * This class manages the list of applications for the resource manager. 
@@ -189,7 +194,12 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
           .add("preemptedAMContainers", metrics.getNumAMContainersPreempted())
           .add("preemptedNonAMContainers", metrics.getNumNonAMContainersPreempted())
           .add("preemptedResources", metrics.getResourcePreempted())
-          .add("applicationType", app.getApplicationType());
+          .add("applicationType", app.getApplicationType())
+          .add("resourceSeconds", StringHelper
+              .getResourceSecondsString(metrics.getResourceSecondsMap()))
+          .add("preemptedResourceSeconds", StringHelper
+              .getResourceSecondsString(
+                  metrics.getPreemptedResourceSecondsMap()));
       return summary;
     }
 
@@ -354,13 +364,23 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
   private RMAppImpl createAndPopulateNewRMApp(
       ApplicationSubmissionContext submissionContext, long submitTime,
       String user, boolean isRecovery, long startTime) throws YarnException {
+
+    ApplicationPlacementContext placementContext = null;
+    try {
+      placementContext = placeApplication(rmContext, submissionContext, user);
+    } catch (YarnException e) {
+      String msg =
+          "Failed to place application " + submissionContext.getApplicationId()
+              + " to queue and specified " + "queue is invalid : "
+              + submissionContext.getQueue();
+      LOG.error(msg, e);
+      throw e;
+    }
+
+    // We only replace the queue when it's a new application
     if (!isRecovery) {
-      // Do queue mapping
-      if (rmContext.getQueuePlacementManager() != null) {
-        // We only do queue mapping when it's a new application
-        rmContext.getQueuePlacementManager().placeApplication(
-            submissionContext, user);
-      }
+      replaceQueueFromPlacementContext(placementContext, submissionContext);
+
       // fail the submission if configured application timeout value is invalid
       RMServerUtils.validateApplicationTimeouts(
           submissionContext.getApplicationTimeouts());
@@ -373,10 +393,16 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     // Verify and get the update application priority and set back to
     // submissionContext
     UserGroupInformation userUgi = UserGroupInformation.createRemoteUser(user);
-    Priority appPriority = scheduler.checkAndGetApplicationPriority(
-        submissionContext.getPriority(), userUgi, submissionContext.getQueue(),
-        applicationId);
-    submissionContext.setPriority(appPriority);
+
+    // Application priority needed to be validated only while submitting. During
+    // recovery, validated priority could be recovered from submission context.
+    if (!isRecovery) {
+      Priority appPriority = scheduler.checkAndGetApplicationPriority(
+          submissionContext.getPriority(), userUgi,
+          submissionContext.getQueue(),
+          applicationId);
+      submissionContext.setPriority(appPriority);
+    }
 
     // Since FairScheduler queue mapping is done inside scheduler,
     // if FairScheduler is used and the queue doesn't exist, we should not
@@ -388,7 +414,15 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       String queueName = submissionContext.getQueue();
       String appName = submissionContext.getApplicationName();
       CSQueue csqueue = ((CapacityScheduler) scheduler).getQueue(queueName);
-      if (null != csqueue
+
+      if (csqueue == null && placementContext != null) {
+        //could be an auto created queue through queue mapping. Validate
+        // parent queue exists and has valid acls
+        String parentQueueName = placementContext.getParentQueue();
+        csqueue = ((CapacityScheduler) scheduler).getQueue(parentQueueName);
+      }
+
+      if (csqueue != null
           && !authorizer.checkPermission(
               new AccessRequest(csqueue.getPrivilegedEntity(), userUgi,
                   SchedulerUtils.toAccessType(QueueACL.SUBMIT_APPLICATIONS),
@@ -412,7 +446,8 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
             submissionContext.getQueue(),
             submissionContext, this.scheduler, this.masterService,
             submitTime, submissionContext.getApplicationType(),
-            submissionContext.getApplicationTags(), amReqs, startTime);
+            submissionContext.getApplicationTags(), amReqs, placementContext,
+            startTime);
     // Concurrent app submissions with same applicationId will fail here
     // Concurrent app submissions with different applicationIds will not
     // influence each other
@@ -755,6 +790,42 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       LOG.error("Statestore update failed for move application '"
           + app.getApplicationId() + "' to queue '" + queue
           + "' with below exception:" + ex.getMessage());
+    }
+  }
+
+  @VisibleForTesting
+  ApplicationPlacementContext placeApplication(RMContext rmContext,
+      ApplicationSubmissionContext context, String user) throws YarnException {
+    ApplicationPlacementContext placementContext = null;
+    PlacementManager placementManager = rmContext.getQueuePlacementManager();
+
+    if (placementManager != null) {
+      placementContext = placementManager.placeApplication(context, user);
+    } else{
+      if ( context.getQueue() == null || context.getQueue().isEmpty()) {
+        final String msg = "Queue Placement Manager is not set. Cannot place "
+            + "application : " + context.getApplicationId() + " to queue and "
+            + "specified queue is invalid " + context.getQueue();
+        LOG.error(msg);
+        throw new YarnException(msg);
+      }
+    }
+
+    return placementContext;
+  }
+
+  void replaceQueueFromPlacementContext(
+      ApplicationPlacementContext placementContext,
+      ApplicationSubmissionContext context) {
+    // Set it to ApplicationSubmissionContext
+    //apply queue mapping only to new application submissions
+    if (placementContext != null && !StringUtils.equalsIgnoreCase(
+        context.getQueue(), placementContext.getQueue())) {
+      LOG.info("Placed application=" + context.getApplicationId() +
+          " to queue=" + placementContext.getQueue() + ", original queue="
+          + context
+          .getQueue());
+      context.setQueue(placementContext.getQueue());
     }
   }
 }

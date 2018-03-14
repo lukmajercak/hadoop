@@ -36,10 +36,9 @@ import java.util.Map;
 import java.util.StringTokenizer;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.mapreduce.v2.app.job.event.TaskAttemptFailEvent;
 import org.junit.Assert;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileContext;
@@ -96,9 +95,12 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestJobHistoryParsing {
-  private static final Log LOG = LogFactory.getLog(TestJobHistoryParsing.class);
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestJobHistoryParsing.class);
 
   private static final String RACK_NAME = "/MyRackName";
 
@@ -711,7 +713,7 @@ public class TestJobHistoryParsing {
     protected void attemptLaunched(TaskAttemptId attemptID) {
       if (attemptID.getTaskId().getId() == 0 && attemptID.getId() == 0) {
         getContext().getEventHandler().handle(
-            new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_FAILMSG));
+            new TaskAttemptFailEvent(attemptID));
       } else {
         getContext().getEventHandler().handle(
             new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_DONE));
@@ -731,7 +733,7 @@ public class TestJobHistoryParsing {
     protected void attemptLaunched(TaskAttemptId attemptID) {
       if (attemptID.getTaskId().getId() == 0) {
         getContext().getEventHandler().handle(
-            new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_FAILMSG));
+            new TaskAttemptFailEvent(attemptID));
       } else {
         getContext().getEventHandler().handle(
             new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_DONE));
@@ -759,10 +761,10 @@ public class TestJobHistoryParsing {
             new TaskEvent(attemptID.getTaskId(), TaskEventType.T_KILL));
       } else if (taskType == TaskType.MAP && taskId == 1) {
         getContext().getEventHandler().handle(
-            new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_FAILMSG));
+            new TaskAttemptFailEvent(attemptID));
       } else if (taskType == TaskType.REDUCE && taskId == 0) {
         getContext().getEventHandler().handle(
-            new TaskAttemptEvent(attemptID, TaskAttemptEventType.TA_FAILMSG));
+            new TaskAttemptFailEvent(attemptID));
       } else if (taskType == TaskType.REDUCE && taskId == 1) {
         getContext().getEventHandler().handle(
             new TaskEvent(attemptID.getTaskId(), TaskEventType.T_KILL));

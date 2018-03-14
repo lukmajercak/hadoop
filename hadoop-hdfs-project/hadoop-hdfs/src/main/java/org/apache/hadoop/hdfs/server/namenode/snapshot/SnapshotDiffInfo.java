@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.snapshot;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -33,7 +32,6 @@ import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.INodeReference;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DirectoryWithSnapshotFeature.ChildrenDiff;
-import org.apache.hadoop.hdfs.util.Diff.ListType;
 
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.SignedBytes;
@@ -101,6 +99,10 @@ class SnapshotDiffInfo {
 
   /** The root directory of the snapshots */
   private final INodeDirectory snapshotRoot;
+  /**
+   *  The scope directory under which snapshot diff is calculated.
+   */
+  private final INodeDirectory snapshotDiffScopeDir;
   /** The starting point of the difference */
   private final Snapshot from;
   /** The end point of the difference */
@@ -123,9 +125,12 @@ class SnapshotDiffInfo {
   private final Map<Long, RenameEntry> renameMap =
       new HashMap<Long, RenameEntry>();
 
-  SnapshotDiffInfo(INodeDirectory snapshotRoot, Snapshot start, Snapshot end) {
-    Preconditions.checkArgument(snapshotRoot.isSnapshottable());
-    this.snapshotRoot = snapshotRoot;
+  SnapshotDiffInfo(INodeDirectory snapshotRootDir,
+      INodeDirectory snapshotDiffScopeDir, Snapshot start, Snapshot end) {
+    Preconditions.checkArgument(snapshotRootDir.isSnapshottable() &&
+        snapshotDiffScopeDir.isDescendantOfSnapshotRoot(snapshotRootDir));
+    this.snapshotRoot = snapshotRootDir;
+    this.snapshotDiffScopeDir = snapshotDiffScopeDir;
     this.from = start;
     this.to = end;
   }
@@ -135,7 +140,7 @@ class SnapshotDiffInfo {
     dirDiffMap.put(dir, diff);
     diffMap.put(dir, relativePath);
     // detect rename
-    for (INode created : diff.getList(ListType.CREATED)) {
+    for (INode created : diff.getCreatedUnmodifiable()) {
       if (created.isReference()) {
         RenameEntry entry = getEntry(created.getId());
         if (entry.getTargetPath() == null) {
@@ -143,7 +148,7 @@ class SnapshotDiffInfo {
         }
       }
     }
-    for (INode deleted : diff.getList(ListType.DELETED)) {
+    for (INode deleted : diff.getDeletedUnmodifiable()) {
       if (deleted instanceof INodeReference.WithName) {
         RenameEntry entry = getEntry(deleted.getId());
         entry.setSource(deleted, relativePath);
@@ -215,11 +220,9 @@ class SnapshotDiffInfo {
   private List<DiffReportEntry> generateReport(ChildrenDiff dirDiff,
       byte[][] parentPath, boolean fromEarlier, Map<Long, RenameEntry> renameMap) {
     List<DiffReportEntry> list = new ChunkedArrayList<>();
-    List<INode> created = dirDiff.getList(ListType.CREATED);
-    List<INode> deleted = dirDiff.getList(ListType.DELETED);
     byte[][] fullPath = new byte[parentPath.length + 1][];
     System.arraycopy(parentPath, 0, fullPath, 0, parentPath.length);
-    for (INode cnode : created) {
+    for (INode cnode : dirDiff.getCreatedUnmodifiable()) {
       RenameEntry entry = renameMap.get(cnode.getId());
       if (entry == null || !entry.isRename()) {
         fullPath[fullPath.length - 1] = cnode.getLocalNameBytes();
@@ -227,7 +230,7 @@ class SnapshotDiffInfo {
             : DiffType.DELETE, fullPath));
       }
     }
-    for (INode dnode : deleted) {
+    for (INode dnode : dirDiff.getDeletedUnmodifiable()) {
       RenameEntry entry = renameMap.get(dnode.getId());
       if (entry != null && entry.isRename()) {
         list.add(new DiffReportEntry(DiffType.RENAME,

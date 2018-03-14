@@ -18,7 +18,6 @@
 package org.apache.hadoop.fs.http.server;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.BlockStoragePolicySpi;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileChecksum;
@@ -36,12 +35,12 @@ import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
-import org.apache.hadoop.hdfs.web.JsonUtil;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.lib.service.FileSystemAccess;
 import org.apache.hadoop.util.StringUtils;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import org.apache.hadoop.fs.permission.FsCreateModes;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -475,6 +474,7 @@ public class FSOperations {
     private InputStream is;
     private Path path;
     private short permission;
+    private short unmaskedPermission;
     private boolean override;
     private short replication;
     private long blockSize;
@@ -488,12 +488,14 @@ public class FSOperations {
      * @param override if the file should be overriden if it already exist.
      * @param repl the replication factor for the file.
      * @param blockSize the block size for the file.
+     * @param unmaskedPerm unmasked permissions for the file
      */
     public FSCreate(InputStream is, String path, short perm, boolean override,
-                    short repl, long blockSize) {
+                    short repl, long blockSize, short unmaskedPerm) {
       this.is = is;
       this.path = new Path(path);
       this.permission = perm;
+      this.unmaskedPermission = unmaskedPerm;
       this.override = override;
       this.replication = repl;
       this.blockSize = blockSize;
@@ -517,6 +519,10 @@ public class FSOperations {
         blockSize = fs.getDefaultBlockSize(path);
       }
       FsPermission fsPermission = new FsPermission(permission);
+      if (unmaskedPermission != -1) {
+        fsPermission = FsCreateModes.create(fsPermission,
+            new FsPermission(unmaskedPermission));
+      }
       int bufferSize = fs.getConf().getInt(HTTPFS_BUFFER_SIZE_KEY,
           HTTP_BUFFER_SIZE_DEFAULT);
       OutputStream os = fs.create(path, fsPermission, override, bufferSize, replication, blockSize, null);
@@ -750,16 +756,20 @@ public class FSOperations {
 
     private Path path;
     private short permission;
+    private short unmaskedPermission;
 
     /**
      * Creates a mkdirs executor.
      *
      * @param path directory path to create.
      * @param permission permission to use.
+     * @param unmaskedPermission unmasked permissions for the directory
      */
-    public FSMkdirs(String path, short permission) {
+    public FSMkdirs(String path, short permission,
+        short unmaskedPermission) {
       this.path = new Path(path);
       this.permission = permission;
+      this.unmaskedPermission = unmaskedPermission;
     }
 
     /**
@@ -775,6 +785,10 @@ public class FSOperations {
     @Override
     public JSONObject execute(FileSystem fs) throws IOException {
       FsPermission fsPermission = new FsPermission(permission);
+      if (unmaskedPermission != -1) {
+        fsPermission = FsCreateModes.create(fsPermission,
+            new FsPermission(unmaskedPermission));
+      }
       boolean mkdirs = fs.mkdirs(path, fsPermission);
       return toJSON(HttpFSFileSystem.MKDIRS_JSON, mkdirs);
     }
@@ -1459,41 +1473,6 @@ public class FSOperations {
   }
 
   /**
-   * Executor that performs a getFileBlockLocations FileSystemAccess
-   * file system operation.
-   */
-  @InterfaceAudience.Private
-  @SuppressWarnings("rawtypes")
-  public static class FSFileBlockLocations implements
-      FileSystemAccess.FileSystemExecutor<Map> {
-    private Path path;
-    private long offsetValue;
-    private long lengthValue;
-
-    /**
-     * Creates a file-block-locations executor.
-     *
-     * @param path the path to retrieve the location
-     * @param offsetValue offset into the given file
-     * @param lengthValue length for which to get locations for
-     */
-    public FSFileBlockLocations(String path, long offsetValue,
-        long lengthValue) {
-      this.path = new Path(path);
-      this.offsetValue = offsetValue;
-      this.lengthValue = lengthValue;
-    }
-
-    @Override
-    public Map execute(FileSystem fs) throws IOException {
-      BlockLocation[] locations =
-          fs.getFileBlockLocations(this.path, this.offsetValue,
-              this.lengthValue);
-      return JsonUtil.toJsonMap(locations);
-    }
-  }
-
-  /**
    *  Executor that performs a createSnapshot FileSystemAccess operation.
    */
   @InterfaceAudience.Private
@@ -1596,5 +1575,4 @@ public class FSOperations {
       return null;
     }
   }
-
 }

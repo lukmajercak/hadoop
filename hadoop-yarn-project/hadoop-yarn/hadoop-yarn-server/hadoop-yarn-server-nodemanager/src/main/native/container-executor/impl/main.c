@@ -20,30 +20,17 @@
 #include "configuration.h"
 #include "container-executor.h"
 #include "util.h"
+#include "get_executable.h"
 #include "modules/gpu/gpu-module.h"
+#include "modules/fpga/fpga-module.h"
 #include "modules/cgroups/cgroups-operations.h"
+#include "utils/string-utils.h"
 
 #include <errno.h>
 #include <grp.h>
-#include <limits.h>
 #include <unistd.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-
-#define CONF_FILENAME "container-executor.cfg"
-
-// When building as part of a Maven build this value gets defined by using
-// container-executor.conf.dir property. See:
-//   hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager/pom.xml
-// for details.
-// NOTE: if this ends up being a relative path it gets resolved relative to
-//       the location of the container-executor binary itself, not getwd(3)
-#ifndef HADOOP_CONF_DIR
-  #error HADOOP_CONF_DIR must be defined
-#endif
 
 static void display_usage(FILE *stream) {
   fprintf(stream,
@@ -145,25 +132,21 @@ of whether an explicit checksetup operation is requested. */
 static void assert_valid_setup(char *argv0) {
   int ret;
   char *executable_file = get_executable(argv0);
-  if (!executable_file) {
-    fprintf(ERRORFILE,"realpath of executable: %s\n",
-      errno != 0 ? strerror(errno) : "unknown");
+  if (!executable_file || executable_file[0] == 0) {
+    fprintf(ERRORFILE, "realpath of executable: %s\n",
+            errno != 0 ? strerror(errno) : "unknown");
     flush_and_close_log_files();
-    exit(-1);
+    exit(INVALID_CONFIG_FILE);
   }
 
-  char *orig_conf_file = HADOOP_CONF_DIR "/" CONF_FILENAME;
-  char *conf_file = resolve_config_path(orig_conf_file, executable_file);
+  char *conf_file = get_config_path(argv0);
 
   if (conf_file == NULL) {
-    free(executable_file);
-    fprintf(ERRORFILE, "Configuration file %s not found.\n", orig_conf_file);
     flush_and_close_log_files();
     exit(INVALID_CONFIG_FILE);
   }
 
   if (check_configuration_permissions(conf_file) != 0) {
-    free(executable_file);
     flush_and_close_log_files();
     exit(INVALID_CONFIG_FILE);
   }
@@ -260,6 +243,11 @@ static int validate_arguments(int argc, char **argv , int *operation) {
    */
   if (strcmp("--module-gpu", argv[1]) == 0) {
     return handle_gpu_request(&update_cgroups_parameters, "gpu", argc - 1,
+           &argv[1]);
+  }
+
+  if (strcmp("--module-fpga", argv[1]) == 0) {
+    return handle_fpga_request(&update_cgroups_parameters, "fpga", argc - 1,
            &argv[1]);
   }
 
@@ -373,13 +361,18 @@ static int validate_run_as_user_commands(int argc, char **argv, int *operation) 
   char * resources_value = NULL;
   switch (command) {
   case INITIALIZE_CONTAINER:
-    if (argc < 9) {
-      fprintf(ERRORFILE, "Too few arguments (%d vs 9) for initialize container\n",
+    if (argc < 10) {
+      fprintf(ERRORFILE, "Too few arguments (%d vs 10) for initialize container\n",
        argc);
       fflush(ERRORFILE);
       return INVALID_ARGUMENT_NUMBER;
     }
     cmd_input.app_id = argv[optind++];
+    cmd_input.container_id = argv[optind++];
+    if (!validate_container_id(cmd_input.container_id)) {
+      fprintf(ERRORFILE, "Invalid container id %s\n", cmd_input.container_id);
+      return INVALID_CONTAINER_ID;
+    }
     cmd_input.cred_file = argv[optind++];
     cmd_input.local_dirs = argv[optind++];// good local dirs as a comma separated list
     cmd_input.log_dirs = argv[optind++];// good log dirs as a comma separated list
@@ -576,6 +569,7 @@ int main(int argc, char **argv) {
 
     exit_code = initialize_app(cmd_input.yarn_user_name,
                             cmd_input.app_id,
+                            cmd_input.container_id,
                             cmd_input.cred_file,
                             split(cmd_input.local_dirs),
                             split(cmd_input.log_dirs),

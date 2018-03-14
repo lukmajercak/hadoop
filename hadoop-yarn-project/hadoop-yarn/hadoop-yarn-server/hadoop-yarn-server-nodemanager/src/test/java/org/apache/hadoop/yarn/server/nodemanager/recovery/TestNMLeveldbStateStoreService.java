@@ -25,10 +25,12 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.io.IOException;
@@ -69,6 +71,8 @@ import org.apache.hadoop.yarn.proto.YarnServerNodemanagerRecoveryProtos.LogDelet
 import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.nodemanager.amrmproxy.AMRMProxyTokenSecretManager;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ResourceMappings;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.LocalResourceTrackerState;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredAMRMProxyState;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredApplicationsState;
@@ -86,10 +90,12 @@ import org.apache.hadoop.yarn.server.security.BaseContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.security.BaseNMTokenSecretManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 public class TestNMLeveldbStateStoreService {
   private static final File TMP_DIR = new File(
@@ -289,14 +295,36 @@ public class TestNMLeveldbStateStoreService {
     assertEquals(containerReq, rcs.getStartRequest());
     assertEquals(diags.toString(), rcs.getDiagnostics());
 
-    // increase the container size, and verify recovered
-    stateStore.storeContainerResourceChanged(containerId, 2,
-        Resource.newInstance(2468, 4));
+    // pause the container, and verify recovered
+    stateStore.storeContainerPaused(containerId);
     restartStateStore();
     recoveredContainers = stateStore.loadContainersState();
     assertEquals(1, recoveredContainers.size());
     rcs = recoveredContainers.get(0);
-    assertEquals(2, rcs.getVersion());
+    assertEquals(RecoveredContainerStatus.PAUSED, rcs.getStatus());
+    assertEquals(ContainerExitStatus.INVALID, rcs.getExitCode());
+    assertEquals(false, rcs.getKilled());
+    assertEquals(containerReq, rcs.getStartRequest());
+
+    // Resume the container
+    stateStore.removeContainerPaused(containerId);
+    restartStateStore();
+    recoveredContainers = stateStore.loadContainersState();
+    assertEquals(1, recoveredContainers.size());
+
+    // increase the container size, and verify recovered
+    ContainerTokenIdentifier updateTokenIdentifier =
+        new ContainerTokenIdentifier(containerId, "host", "user",
+            Resource.newInstance(2468, 4), 9876543210L, 42, 2468,
+            Priority.newInstance(7), 13579);
+
+    stateStore
+        .storeContainerUpdateToken(containerId, updateTokenIdentifier);
+    restartStateStore();
+    recoveredContainers = stateStore.loadContainersState();
+    assertEquals(1, recoveredContainers.size());
+    rcs = recoveredContainers.get(0);
+    assertEquals(0, rcs.getVersion());
     assertEquals(RecoveredContainerStatus.LAUNCHED, rcs.getStatus());
     assertEquals(ContainerExitStatus.INVALID, rcs.getExitCode());
     assertEquals(false, rcs.getKilled());
@@ -313,7 +341,9 @@ public class TestNMLeveldbStateStoreService {
     assertEquals(RecoveredContainerStatus.LAUNCHED, rcs.getStatus());
     assertEquals(ContainerExitStatus.INVALID, rcs.getExitCode());
     assertTrue(rcs.getKilled());
-    assertEquals(containerReq, rcs.getStartRequest());
+    ContainerTokenIdentifier tokenReadFromRequest = BuilderUtils
+        .newContainerTokenIdentifier(rcs.getStartRequest().getContainerToken());
+    assertEquals(updateTokenIdentifier, tokenReadFromRequest);
     assertEquals(diags.toString(), rcs.getDiagnostics());
 
     // add yet more diags, mark container completed, and verify recovered
@@ -327,7 +357,6 @@ public class TestNMLeveldbStateStoreService {
     assertEquals(RecoveredContainerStatus.COMPLETED, rcs.getStatus());
     assertEquals(21, rcs.getExitCode());
     assertTrue(rcs.getKilled());
-    assertEquals(containerReq, rcs.getStartRequest());
     assertEquals(diags.toString(), rcs.getDiagnostics());
 
     // store remainingRetryAttempts, workDir and logDir
@@ -1101,16 +1130,21 @@ public class TestNMLeveldbStateStoreService {
     ContainerId containerId = ContainerId.newContainerId(appAttemptId, 5);
     storeMockContainer(containerId);
 
+    Container container = mock(Container.class);
+    when(container.getContainerId()).thenReturn(containerId);
+    ResourceMappings resourceMappings = new ResourceMappings();
+    when(container.getResourceMappings()).thenReturn(resourceMappings);
+
     // Store ResourceMapping
-    stateStore.storeAssignedResources(containerId, "gpu",
+    stateStore.storeAssignedResources(container, "gpu",
         Arrays.asList("1", "2", "3"));
     // This will overwrite above
     List<Serializable> gpuRes1 = Arrays.asList("1", "2", "4");
-    stateStore.storeAssignedResources(containerId, "gpu", gpuRes1);
+    stateStore.storeAssignedResources(container, "gpu", gpuRes1);
     List<Serializable> fpgaRes = Arrays.asList("3", "4", "5", "6");
-    stateStore.storeAssignedResources(containerId, "fpga", fpgaRes);
+    stateStore.storeAssignedResources(container, "fpga", fpgaRes);
     List<Serializable> numaRes = Arrays.asList("numa1");
-    stateStore.storeAssignedResources(containerId, "numa", numaRes);
+    stateStore.storeAssignedResources(container, "numa", numaRes);
 
     // add a invalid key
     restartStateStore();
@@ -1120,12 +1154,50 @@ public class TestNMLeveldbStateStoreService {
     List<Serializable> res = rcs.getResourceMappings()
         .getAssignedResources("gpu");
     Assert.assertTrue(res.equals(gpuRes1));
+    Assert.assertTrue(
+        resourceMappings.getAssignedResources("gpu").equals(gpuRes1));
 
     res = rcs.getResourceMappings().getAssignedResources("fpga");
     Assert.assertTrue(res.equals(fpgaRes));
+    Assert.assertTrue(
+        resourceMappings.getAssignedResources("fpga").equals(fpgaRes));
 
     res = rcs.getResourceMappings().getAssignedResources("numa");
     Assert.assertTrue(res.equals(numaRes));
+    Assert.assertTrue(
+        resourceMappings.getAssignedResources("numa").equals(numaRes));
+  }
+
+  @Test
+  public void testStateStoreNodeHealth() throws IOException {
+    // keep the working DB clean, break a temp DB
+    DB keepDB = stateStore.getDB();
+    DB myMocked = mock(DB.class);
+    stateStore.setDB(myMocked);
+
+    ApplicationId appId = ApplicationId.newInstance(1234, 1);
+    ApplicationAttemptId appAttemptId =
+        ApplicationAttemptId.newInstance(appId, 1);
+    DBException toThrow = new DBException();
+    Mockito.doThrow(toThrow).when(myMocked).
+        put(any(byte[].class), any(byte[].class));
+    // write some data
+    try {
+      // chosen a simple method could be any of the "void" methods
+      ContainerId containerId = ContainerId.newContainerId(appAttemptId, 1);
+      stateStore.storeContainerKilled(containerId);
+    } catch (IOException ioErr) {
+      // Cause should be wrapped DBException
+      assertTrue(ioErr.getCause() instanceof DBException);
+      // check the store is marked unhealthy
+      assertFalse("Statestore should have been unhealthy",
+          stateStore.isHealthy());
+      return;
+    } finally {
+      // restore the working DB
+      stateStore.setDB(keepDB);
+    }
+    Assert.fail("Expected exception not thrown");
   }
 
   private StartContainerRequest storeMockContainer(ContainerId containerId)

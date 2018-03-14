@@ -276,9 +276,8 @@ public class TestAMRMClientContainerRequest {
       AMRMClientImpl<ContainerRequest> client, ContainerRequest request,
       String location, boolean expectedRelaxLocality,
       ExecutionType executionType) {
-    ResourceRequest ask = client.getTable(0)
-        .get(request.getPriority(), location, executionType,
-            request.getCapability()).remoteRequest;
+    ResourceRequest ask = client.getTable(0).get(request.getPriority(),
+        location, executionType, request.getCapability()).remoteRequest;
     assertEquals(location, ask.getResourceName());
     assertEquals(1, ask.getNumContainers());
     assertEquals(expectedRelaxLocality, ask.getRelaxLocality());

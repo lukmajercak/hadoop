@@ -297,6 +297,16 @@ message GetSnapshotDiffReportResponseProto {
   required SnapshotDiffReportProto diffReport = 1;
 }
 
+message GetSnapshotDiffReportListingRequestProto {
+  required string snapshotRoot = 1;
+  required string fromSnapshot = 2;
+  required string toSnapshot = 3;
+  optional SnapshotDiffReportCursorProto cursor = 4;
+}
+
+message GetSnapshotDiffReportListingResponseProto {
+  required SnapshotDiffReportListingProto diffReport = 1;
+}
 message RenewLeaseRequestProto {
   required string clientName = 1;
 }
@@ -482,6 +492,15 @@ message GetFileInfoRequestProto {
 }
 
 message GetFileInfoResponseProto {
+  optional HdfsFileStatusProto fs = 1;
+}
+
+message GetLocatedFileInfoRequestProto {
+  optional string src = 1;
+  optional bool needBlockToken = 2 [default = false];
+}
+
+message GetLocatedFileInfoResponseProto {
   optional HdfsFileStatusProto fs = 1;
 }
 
@@ -777,8 +796,15 @@ message GetEditsFromTxidResponseProto {
   required EventsListProto eventsList = 1;
 }
 
+enum OpenFilesTypeProto {
+  ALL_OPEN_FILES = 1;
+  BLOCKING_DECOMMISSION = 2;
+}
+
 message ListOpenFilesRequestProto {
   required int64 id = 1;
+  repeated OpenFilesTypeProto types = 2;
+  optional string path = 3;
 }
 
 message OpenFilesBatchResponseProto {
@@ -791,6 +817,7 @@ message OpenFilesBatchResponseProto {
 message ListOpenFilesResponseProto {
   repeated OpenFilesBatchResponseProto entries = 1;
   required bool hasMore = 2;
+  repeated OpenFilesTypeProto types = 3;
 }
 
 service ClientNamenodeProtocol {
@@ -858,6 +885,8 @@ service ClientNamenodeProtocol {
       returns(ListCorruptFileBlocksResponseProto);
   rpc metaSave(MetaSaveRequestProto) returns(MetaSaveResponseProto);
   rpc getFileInfo(GetFileInfoRequestProto) returns(GetFileInfoResponseProto);
+  rpc getLocatedFileInfo(GetLocatedFileInfoRequestProto)
+      returns(GetLocatedFileInfoResponseProto);
   rpc addCacheDirective(AddCacheDirectiveRequestProto)
       returns (AddCacheDirectiveResponseProto);
   rpc modifyCacheDirective(ModifyCacheDirectiveRequestProto)
@@ -913,6 +942,8 @@ service ClientNamenodeProtocol {
       returns(DeleteSnapshotResponseProto);
   rpc getSnapshotDiffReport(GetSnapshotDiffReportRequestProto)
       returns(GetSnapshotDiffReportResponseProto);
+  rpc getSnapshotDiffReportListing(GetSnapshotDiffReportListingRequestProto)
+      returns(GetSnapshotDiffReportListingResponseProto);
   rpc isFileClosed(IsFileClosedRequestProto)
       returns(IsFileClosedResponseProto);
   rpc modifyAclEntries(ModifyAclEntriesRequestProto)

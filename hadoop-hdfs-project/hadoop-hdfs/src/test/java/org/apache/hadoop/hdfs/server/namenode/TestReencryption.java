@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -129,11 +128,9 @@ public class TestReencryption {
     conf.setInt(DFSConfigKeys.DFS_LIST_LIMIT, 3);
     // Adjust configs for re-encrypt test cases
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REENCRYPT_BATCH_SIZE_KEY, 5);
-    conf.setTimeDuration(
-        DFSConfigKeys.DFS_NAMENODE_REENCRYPT_SLEEP_INTERVAL_KEY, 1,
-        TimeUnit.SECONDS);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
     cluster.waitActive();
+    cluster.waitClusterUp();
     fs = cluster.getFileSystem();
     fsn = cluster.getNamesystem();
     fsWrapper = new FileSystemTestWrapper(fs);
@@ -166,7 +163,8 @@ public class TestReencryption {
   }
 
   private FileEncryptionInfo getFileEncryptionInfo(Path path) throws Exception {
-    return fsn.getFileInfo(path.toString(), false).getFileEncryptionInfo();
+    return fsn.getFileInfo(path.toString(), false, false, false)
+        .getFileEncryptionInfo();
   }
 
   @Test
@@ -1284,6 +1282,7 @@ public class TestReencryption {
     fsn = cluster.getNamesystem();
     getEzManager().pauseReencryptForTesting();
     cluster.waitActive();
+    cluster.waitClusterUp();
   }
 
   private void waitForReencryptedZones(final int expected)
@@ -1469,8 +1468,8 @@ public class TestReencryption {
     assertEquals(5, getZoneStatus(zone.toString()).getFilesReencrypted());
   }
 
-  @Test
-  public void testCancelFuture() throws Exception {
+  private void cancelFutureDuringReencryption(final Path zone)
+      throws Exception {
     final AtomicBoolean callableRunning = new AtomicBoolean(false);
     class MyInjector extends EncryptionFaultInjector {
       private volatile int exceptionCount = 0;
@@ -1500,8 +1499,6 @@ public class TestReencryption {
      * /dir/f
      */
     final int len = 8196;
-    final Path zoneParent = new Path("/zones");
-    final Path zone = new Path(zoneParent, "zone");
     fsWrapper.mkdir(zone, FsPermission.getDirDefault(), true);
     dfsAdmin.createEncryptionZone(zone, TEST_KEY, NO_TRASH);
     for (int i = 0; i < 10; ++i) {
@@ -1519,6 +1516,7 @@ public class TestReencryption {
     getEzManager().pauseReencryptForTesting();
     dfsAdmin.reencryptEncryptionZone(zone, ReencryptAction.START);
     waitForQueuedZones(1);
+    getEzManager().pauseReencryptUpdaterForTesting();
     getEzManager().resumeReencryptForTesting();
 
     LOG.info("Waiting for re-encrypt callables to run");
@@ -1529,7 +1527,6 @@ public class TestReencryption {
       }
     }, 100, 10000);
 
-    getEzManager().pauseReencryptUpdaterForTesting();
     dfsAdmin.reencryptEncryptionZone(zone, ReencryptAction.CANCEL);
 
     // now resume updater and verify status.
@@ -1548,6 +1545,59 @@ public class TestReencryption {
     assertEquals(0, zs.getFilesReencrypted());
 
     assertTrue(getUpdater().isRunning());
+  }
+
+  @Test
+  public void testCancelFutureThenReencrypt() throws Exception {
+    final Path zoneParent = new Path("/zones");
+    final Path zone = new Path(zoneParent, "zone");
+    cancelFutureDuringReencryption(zone);
+
+    // make sure new re-encryption after cancellation works.
+    getEzManager().resumeReencryptForTesting();
+    dfsAdmin.reencryptEncryptionZone(zone, ReencryptAction.START);
+    waitForZoneCompletes(zone.toString());
+    final RemoteIterator<ZoneReencryptionStatus> it =
+        dfsAdmin.listReencryptionStatus();
+    final ZoneReencryptionStatus zs = it.next();
+    assertEquals(zone.toString(), zs.getZoneName());
+    assertEquals(ZoneReencryptionStatus.State.Completed, zs.getState());
+    assertFalse(zs.isCanceled());
+    assertTrue(zs.getCompletionTime() > 0);
+    assertTrue(zs.getCompletionTime() > zs.getSubmissionTime());
+    assertEquals(10, zs.getFilesReencrypted());
+  }
+
+  @Test
+  public void testCancelFutureThenRestart() throws Exception {
+    final Path zoneParent = new Path("/zones");
+    final Path zone = new Path(zoneParent, "zone");
+    cancelFutureDuringReencryption(zone);
+
+    // restart, and check status.
+    restartClusterDisableReencrypt();
+    RemoteIterator<ZoneReencryptionStatus> it =
+        dfsAdmin.listReencryptionStatus();
+    ZoneReencryptionStatus zs = it.next();
+    assertEquals(zone.toString(), zs.getZoneName());
+    assertEquals(ZoneReencryptionStatus.State.Completed, zs.getState());
+    assertTrue(zs.isCanceled());
+    assertTrue(zs.getCompletionTime() > 0);
+    assertTrue(zs.getCompletionTime() > zs.getSubmissionTime());
+    assertEquals(0, zs.getFilesReencrypted());
+
+    // verify re-encryption works after restart.
+    getEzManager().resumeReencryptForTesting();
+    dfsAdmin.reencryptEncryptionZone(zone, ReencryptAction.START);
+    waitForZoneCompletes(zone.toString());
+    it = dfsAdmin.listReencryptionStatus();
+    zs = it.next();
+    assertEquals(zone.toString(), zs.getZoneName());
+    assertEquals(ZoneReencryptionStatus.State.Completed, zs.getState());
+    assertFalse(zs.isCanceled());
+    assertTrue(zs.getCompletionTime() > 0);
+    assertTrue(zs.getCompletionTime() > zs.getSubmissionTime());
+    assertEquals(10, zs.getFilesReencrypted());
   }
 
   @Test
@@ -1609,7 +1659,7 @@ public class TestReencryption {
     cluster.getConfiguration(0)
         .unset(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH);
     cluster.restartNameNodes();
-    cluster.waitActive();
+    cluster.waitClusterUp();
 
     // test re-encrypt should fail
     try {
@@ -1673,6 +1723,9 @@ public class TestReencryption {
     }
 
     fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+    // trigger the background thread to run, without having to
+    // wait for DFS_NAMENODE_REENCRYPT_SLEEP_INTERVAL_KEY
+    getHandler().notifyNewSubmission();
     waitForReencryptedFiles(zone.toString(), 10);
   }
 

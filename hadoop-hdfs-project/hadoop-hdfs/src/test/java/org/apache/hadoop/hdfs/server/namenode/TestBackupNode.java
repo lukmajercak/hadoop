@@ -54,7 +54,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.log4j.Level;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.base.Supplier;
@@ -62,7 +61,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
-@Ignore("Temporarily disabling the BackupNode unit test.")
 public class TestBackupNode {
   public static final Log LOG = LogFactory.getLog(TestBackupNode.class);
 
@@ -276,7 +274,8 @@ public class TestBackupNode {
       backup = startBackupNode(conf, StartupOption.BACKUP, 1);
 
       testBNInSync(cluster, backup, 4);
-      assertNotNull(backup.getNamesystem().getFileInfo("/edit-while-bn-down", false));
+      assertNotNull(backup.getNamesystem()
+          .getFileInfo("/edit-while-bn-down", false, false, false));
       
       // Trigger an unclean shutdown of the backup node. Backup node will not
       // unregister from the active when this is done simulating a node crash.
@@ -316,7 +315,8 @@ public class TestBackupNode {
         public Boolean get() {
           LOG.info("Checking for " + src + " on BN");
           try {
-            boolean hasFile = backup.getNamesystem().getFileInfo(src, false) != null;
+            boolean hasFile = backup.getNamesystem()
+                .getFileInfo(src, false, false, false) != null;
             boolean txnIdMatch =
               backup.getRpcServer().getTransactionID() ==
               nn.getRpcServer().getTransactionID();
@@ -467,7 +467,7 @@ public class TestBackupNode {
       assertTrue("file3 does not exist on BackupNode",
           op != StartupOption.BACKUP ||
           backup.getNamesystem().getFileInfo(
-              file3.toUri().getPath(), false) != null);
+              file3.toUri().getPath(), false, false, false) != null);
 
     } catch(IOException e) {
       LOG.error("Error in TestBackupNode:", e);

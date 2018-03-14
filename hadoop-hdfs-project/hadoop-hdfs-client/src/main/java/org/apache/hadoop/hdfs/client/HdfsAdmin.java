@@ -24,9 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.key.KeyProvider;
 import org.apache.hadoop.fs.BlockStoragePolicySpi;
 import org.apache.hadoop.fs.CacheFlag;
-import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileEncryptionInfo;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
@@ -35,16 +33,18 @@ import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSInotifyEventInputStream;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.protocol.AddECPolicyResponse;
+import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolEntry;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.ReencryptAction;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.ZoneReencryptionStatus;
 import org.apache.hadoop.security.AccessControlException;
 
@@ -328,7 +328,7 @@ public class HdfsAdmin {
         throw new HadoopIllegalArgumentException(
             "can not have both PROVISION_TRASH and NO_TRASH flags");
       }
-      this.provisionEZTrash(path);
+      dfs.provisionEZTrash(path, TRASH_PERMISSION);
     }
   }
 
@@ -339,7 +339,7 @@ public class HdfsAdmin {
    * @throws IOException if the trash directory can not be created.
    */
   public void provisionEncryptionZoneTrash(Path path) throws IOException {
-    this.provisionEZTrash(path);
+    dfs.provisionEZTrash(path, TRASH_PERMISSION);
   }
 
   /**
@@ -537,7 +537,8 @@ public class HdfsAdmin {
    *
    * @throws IOException
    */
-  public ErasureCodingPolicy[] getErasureCodingPolicies() throws IOException {
+  public ErasureCodingPolicyInfo[] getErasureCodingPolicies()
+      throws IOException {
     return dfs.getClient().getErasureCodingPolicies();
   }
 
@@ -562,7 +563,7 @@ public class HdfsAdmin {
    * @return Return the response list of adding operations.
    * @throws IOException
    */
-  public AddECPolicyResponse[] addErasureCodingPolicies(
+  public AddErasureCodingPolicyResponse[] addErasureCodingPolicies(
       ErasureCodingPolicy[] policies)  throws IOException {
     return dfs.addErasureCodingPolicies(policies);
   }
@@ -600,46 +601,6 @@ public class HdfsAdmin {
     dfs.disableErasureCodingPolicy(ecPolicyName);
   }
 
-  private void provisionEZTrash(Path path) throws IOException {
-    // make sure the path is an EZ
-    EncryptionZone ez = dfs.getEZForPath(path);
-    if (ez == null) {
-      throw new IllegalArgumentException(path + " is not an encryption zone.");
-    }
-
-    String ezPath = ez.getPath();
-    if (!path.toString().equals(ezPath)) {
-      throw new IllegalArgumentException(path + " is not the root of an " +
-          "encryption zone. Do you mean " + ez.getPath() + "?");
-    }
-
-    // check if the trash directory exists
-
-    Path trashPath = new Path(ez.getPath(), FileSystem.TRASH_PREFIX);
-
-    try {
-      FileStatus trashFileStatus = dfs.getFileStatus(trashPath);
-      String errMessage = "Will not provision new trash directory for " +
-          "encryption zone " + ez.getPath() + ". Path already exists.";
-      if (!trashFileStatus.isDirectory()) {
-        errMessage += "\r\n" +
-            "Warning: " + trashPath.toString() + " is not a directory";
-      }
-      if (!trashFileStatus.getPermission().equals(TRASH_PERMISSION)) {
-        errMessage += "\r\n" +
-            "Warning: the permission of " +
-            trashPath.toString() + " is not " + TRASH_PERMISSION;
-      }
-      throw new FileAlreadyExistsException(errMessage);
-    } catch (FileNotFoundException ignored) {
-      // no trash path
-    }
-
-    // Update the permission bits
-    dfs.mkdir(trashPath, TRASH_PERMISSION);
-    dfs.setPermission(trashPath, TRASH_PERMISSION);
-  }
-
   /**
    * Returns a RemoteIterator which can be used to list all open files
    * currently managed by the NameNode. For large numbers of open files,
@@ -650,8 +611,14 @@ public class HdfsAdmin {
    * <p/>
    * This method can only be called by HDFS superusers.
    */
+  @Deprecated
   public RemoteIterator<OpenFileEntry> listOpenFiles() throws IOException {
     return dfs.listOpenFiles();
+  }
+
+  public RemoteIterator<OpenFileEntry> listOpenFiles(
+      EnumSet<OpenFilesType> openFilesTypes, String path) throws IOException {
+    return dfs.listOpenFiles(openFilesTypes, path);
   }
 
 }

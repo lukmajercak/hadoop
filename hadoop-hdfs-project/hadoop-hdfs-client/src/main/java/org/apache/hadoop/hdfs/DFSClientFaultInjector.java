@@ -64,6 +64,8 @@ public class DFSClientFaultInjector {
   }
 
   public void sleepBeforeHedgedGet() {}
-
+  
   public void pipelineAckFromDatanodeDelay() throws IOException {}
+
+  public void delayWhenRenewLeaseTimeout() {}
 }

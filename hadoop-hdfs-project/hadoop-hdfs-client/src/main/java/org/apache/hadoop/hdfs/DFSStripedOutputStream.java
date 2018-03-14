@@ -63,6 +63,7 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
@@ -81,15 +82,20 @@ public class DFSStripedOutputStream extends DFSOutputStream
     implements StreamCapabilities {
   private static final ByteBufferPool BUFFER_POOL = new ElasticByteBufferPool();
 
+  /**
+   * OutputStream level last exception, will be used to indicate the fatal
+   * exception of this stream, i.e., being aborted.
+   */
+  private final ExceptionLastSeen exceptionLastSeen = new ExceptionLastSeen();
+
   static class MultipleBlockingQueue<T> {
     private final List<BlockingQueue<T>> queues;
 
     MultipleBlockingQueue(int numQueue, int queueSize) {
-      List<BlockingQueue<T>> list = new ArrayList<>(numQueue);
+      queues = new ArrayList<>(numQueue);
       for (int i = 0; i < numQueue; i++) {
-        list.add(new LinkedBlockingQueue<T>(queueSize));
+        queues.add(new LinkedBlockingQueue<T>(queueSize));
       }
-      queues = Collections.synchronizedList(list);
     }
 
     void offer(int i, T object) {
@@ -156,8 +162,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
       followingBlocks = new MultipleBlockingQueue<>(numAllBlocks, 1);
       endBlocks = new MultipleBlockingQueue<>(numAllBlocks, 1);
       newBlocks = new MultipleBlockingQueue<>(numAllBlocks, 1);
-      updateStreamerMap = Collections.synchronizedMap(
-          new HashMap<StripedDataStreamer, Boolean>(numAllBlocks));
+      updateStreamerMap = new ConcurrentHashMap<>(numAllBlocks);
       streamerUpdateResult = new MultipleBlockingQueue<>(numAllBlocks, 1);
     }
 
@@ -199,7 +204,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
     private final ByteBuffer[] buffers;
     private final byte[][] checksumArrays;
 
-    CellBuffers(int numParityBlocks) throws InterruptedException{
+    CellBuffers(int numParityBlocks) {
       if (cellSize % bytesPerChecksum != 0) {
         throw new HadoopIllegalArgumentException("Invalid values: "
             + HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY + " (="
@@ -260,6 +265,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
 
   private final Coordinator coordinator;
   private final CellBuffers cellBuffers;
+  private final ErasureCodingPolicy ecPolicy;
   private final RawErasureEncoder encoder;
   private final List<StripedDataStreamer> streamers;
   private final DFSPacket[] currentPackets; // current Packet of each streamer
@@ -286,7 +292,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
       LOG.debug("Creating DFSStripedOutputStream for " + src);
     }
 
-    final ErasureCodingPolicy ecPolicy = stat.getErasureCodingPolicy();
+    ecPolicy = stat.getErasureCodingPolicy();
     final int numParityBlocks = ecPolicy.getNumParityUnits();
     cellSize = ecPolicy.getCellSize();
     numDataBlocks = ecPolicy.getNumDataUnits();
@@ -304,12 +310,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
         ecPolicy.getCodecName(), coderOptions);
 
     coordinator = new Coordinator(numAllBlocks);
-    try {
-      cellBuffers = new CellBuffers(numParityBlocks);
-    } catch (InterruptedException ie) {
-      throw DFSUtilClient.toInterruptedIOException(
-          "Failed to create cell buffers", ie);
-    }
+    cellBuffers = new CellBuffers(numParityBlocks);
 
     streamers = new ArrayList<>(numAllBlocks);
     for (short i = 0; i < numAllBlocks; i++) {
@@ -360,7 +361,7 @@ public class DFSStripedOutputStream extends DFSOutputStream
    * @param buffers data buffers + parity buffers
    */
   private static void encode(RawErasureEncoder encoder, int numData,
-      ByteBuffer[] buffers) {
+      ByteBuffer[] buffers) throws IOException {
     final ByteBuffer[] dataBuffers = new ByteBuffer[numData];
     final ByteBuffer[] parityBuffers = new ByteBuffer[buffers.length - numData];
     System.arraycopy(buffers, 0, dataBuffers, 0, dataBuffers.length);
@@ -478,11 +479,6 @@ public class DFSStripedOutputStream extends DFSOutputStream
     final LocatedBlock lb = addBlock(excludedNodes, dfsClient, src,
         currentBlockGroup, fileId, favoredNodes, getAddBlockFlags());
     assert lb.isStriped();
-    if (lb.getLocations().length < numDataBlocks) {
-      throw new IOException("Failed to get " + numDataBlocks
-          + " nodes from namenode: blockGroupSize= " + numAllBlocks
-          + ", blocks.length= " + lb.getLocations().length);
-    }
     // assign the new block to the current block group
     currentBlockGroup = lb.getBlock();
     blockGroupIndex++;
@@ -494,11 +490,16 @@ public class DFSStripedOutputStream extends DFSOutputStream
       StripedDataStreamer si = getStripedDataStreamer(i);
       assert si.isHealthy();
       if (blocks[i] == null) {
+        // allocBlock() should guarantee that all data blocks are successfully
+        // allocated.
+        assert i >= numDataBlocks;
         // Set exception and close streamer as there is no block locations
         // found for the parity block.
-        LOG.warn("Failed to get block location for parity block, index=" + i);
+        LOG.warn("Cannot allocate parity block(index={}, policy={}). " +
+            "Not enough datanodes? Exclude nodes={}", i,  ecPolicy.getName(),
+            excludedNodes);
         si.getLastException().set(
-            new IOException("Failed to get following block, i=" + i));
+            new IOException("Failed to get parity block, index=" + i));
         si.getErrorState().setInternalError();
         si.close(true);
       } else {
@@ -976,12 +977,9 @@ public class DFSStripedOutputStream extends DFSOutputStream
       if (isClosed()) {
         return;
       }
-      for (StripedDataStreamer streamer : streamers) {
-        streamer.getLastException().set(
-            new IOException("Lease timeout of "
-                + (dfsClient.getConf().getHdfsTimeout() / 1000)
-                + " seconds expired."));
-      }
+      exceptionLastSeen.set(new IOException("Lease timeout of "
+          + (dfsClient.getConf().getHdfsTimeout() / 1000)
+          + " seconds expired."));
 
       try {
         closeThreads(true);
@@ -1138,18 +1136,26 @@ public class DFSStripedOutputStream extends DFSOutputStream
   @Override
   protected synchronized void closeImpl() throws IOException {
     if (isClosed()) {
+      exceptionLastSeen.check(true);
+
+      // Writing to at least {dataUnits} replicas can be considered as success,
+      // and the rest of data can be recovered.
+      final int minReplication = ecPolicy.getNumDataUnits();
+      int goodStreamers = 0;
       final MultipleIOException.Builder b = new MultipleIOException.Builder();
-      for(int i = 0; i < streamers.size(); i++) {
-        final StripedDataStreamer si = getStripedDataStreamer(i);
+      for (final StripedDataStreamer si : streamers) {
         try {
           si.getLastException().check(true);
+          goodStreamers++;
         } catch (IOException e) {
           b.add(e);
         }
       }
-      final IOException ioe = b.build();
-      if (ioe != null) {
-        throw ioe;
+      if (goodStreamers < minReplication) {
+        final IOException ioe = b.build();
+        if (ioe != null) {
+          throw ioe;
+        }
       }
       return;
     }
@@ -1188,9 +1194,10 @@ public class DFSStripedOutputStream extends DFSOutputStream
         }
       } finally {
         // Failures may happen when flushing data/parity data out. Exceptions
-        // may be thrown if more than 3 streamers fail, or updatePipeline RPC
-        // fails. Streamers may keep waiting for the new block/GS information.
-        // Thus need to force closing these threads.
+        // may be thrown if the number of failed streamers is more than the
+        // number of parity blocks, or updatePipeline RPC fails. Streamers may
+        // keep waiting for the new block/GS information. Thus need to force
+        // closing these threads.
         closeThreads(true);
       }
 
@@ -1281,8 +1288,8 @@ public class DFSStripedOutputStream extends DFSOutputStream
       int bgIndex = entry.getKey();
       int corruptBlockCount = entry.getValue();
       StringBuilder sb = new StringBuilder();
-      sb.append("Block group <").append(bgIndex).append("> has ")
-          .append(corruptBlockCount).append(" corrupt blocks.");
+      sb.append("Block group <").append(bgIndex).append("> failed to write ")
+          .append(corruptBlockCount).append(" blocks.");
       if (corruptBlockCount == numAllBlocks - numDataBlocks) {
         sb.append(" It's at high risk of losing data.");
       }

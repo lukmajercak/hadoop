@@ -18,17 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -59,12 +49,16 @@ import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManager;
 import org.apache.hadoop.yarn.server.nodemanager.collectormanager.NMCollectorService;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManager;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerImpl;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.ConfigurationNodeLabelsProvider;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.NodeLabelsProvider;
@@ -72,14 +66,25 @@ import org.apache.hadoop.yarn.server.nodemanager.nodelabels.ScriptBasedNodeLabel
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMLeveldbStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
-import org.apache.hadoop.yarn.server.scheduler.OpportunisticContainerAllocator;
 import org.apache.hadoop.yarn.server.nodemanager.security.NMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.nodemanager.security.NMTokenSecretManagerInNM;
 import org.apache.hadoop.yarn.server.nodemanager.timelineservice.NMTimelinePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer;
+import org.apache.hadoop.yarn.server.scheduler.OpportunisticContainerAllocator;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
+import org.apache.hadoop.yarn.state.MultiStateTransitionListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NodeManager extends CompositeService 
     implements EventHandler<NodeManagerEvent> {
@@ -129,6 +134,17 @@ public class NodeManager extends CompositeService
   private AtomicBoolean isStopping = new AtomicBoolean(false);
   private boolean rmWorkPreservingRestartEnabled;
   private boolean shouldExitOnShutdownEvent = false;
+
+  /**
+   * Default Container State transition listener.
+   */
+  public static class DefaultContainerStateListener extends
+      MultiStateTransitionListener
+          <ContainerImpl, ContainerEvent, ContainerState>
+      implements ContainerStateTransitionListener {
+    @Override
+    public void init(Context context) {}
+  }
 
   public NodeManager() {
     super(NodeManager.class.getName());
@@ -189,7 +205,7 @@ public class NodeManager extends CompositeService
   }
 
   protected NodeResourceMonitor createNodeResourceMonitor() {
-    return new NodeResourceMonitorImpl();
+    return new NodeResourceMonitorImpl(context);
   }
 
   protected ContainerManagerImpl createContainerManager(Context context,
@@ -219,8 +235,23 @@ public class NodeManager extends CompositeService
       NMTokenSecretManagerInNM nmTokenSecretManager,
       NMStateStoreService stateStore, boolean isDistSchedulerEnabled,
       Configuration conf) {
-    return new NMContext(containerTokenSecretManager, nmTokenSecretManager,
-        dirsHandler, aclsManager, stateStore, isDistSchedulerEnabled, conf);
+    List<ContainerStateTransitionListener> listeners =
+        conf.getInstances(
+            YarnConfiguration.NM_CONTAINER_STATE_TRANSITION_LISTENERS,
+        ContainerStateTransitionListener.class);
+    NMContext nmContext = new NMContext(containerTokenSecretManager,
+        nmTokenSecretManager, dirsHandler, aclsManager, stateStore,
+        isDistSchedulerEnabled, conf);
+    nmContext.setNodeManagerMetrics(metrics);
+    DefaultContainerStateListener defaultListener =
+        new DefaultContainerStateListener();
+    nmContext.setContainerStateTransitionListener(defaultListener);
+    defaultListener.init(nmContext);
+    for (ContainerStateTransitionListener listener : listeners) {
+      listener.init(nmContext);
+      defaultListener.addListener(listener);
+    }
+    return nmContext;
   }
 
   protected void doSecureLogin() throws IOException {
@@ -300,6 +331,18 @@ public class NodeManager extends CompositeService
         nmCheckintervalTime, scriptTimeout, scriptArgs);
   }
 
+  @VisibleForTesting
+  protected ResourcePluginManager createResourcePluginManager() {
+    return new ResourcePluginManager();
+  }
+
+  @VisibleForTesting
+  protected ContainerExecutor createContainerExecutor(Configuration conf) {
+    return ReflectionUtils.newInstance(
+        conf.getClass(YarnConfiguration.NM_CONTAINER_EXECUTOR,
+            DefaultContainerExecutor.class, ContainerExecutor.class), conf);
+  }
+
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
     rmWorkPreservingRestartEnabled = conf.getBoolean(YarnConfiguration
@@ -325,11 +368,22 @@ public class NodeManager extends CompositeService
     
     this.aclsManager = new ApplicationACLsManager(conf);
 
-    ContainerExecutor exec = ReflectionUtils.newInstance(
-        conf.getClass(YarnConfiguration.NM_CONTAINER_EXECUTOR,
-          DefaultContainerExecutor.class, ContainerExecutor.class), conf);
+    this.dirsHandler = new LocalDirsHandlerService(metrics);
+
+    boolean isDistSchedulingEnabled =
+        conf.getBoolean(YarnConfiguration.DIST_SCHEDULING_ENABLED,
+            YarnConfiguration.DEFAULT_DIST_SCHEDULING_ENABLED);
+
+    this.context = createNMContext(containerTokenSecretManager,
+        nmTokenSecretManager, nmStore, isDistSchedulingEnabled, conf);
+
+    ResourcePluginManager pluginManager = createResourcePluginManager();
+    pluginManager.initialize(context);
+    ((NMContext)context).setResourcePluginManager(pluginManager);
+
+    ContainerExecutor exec = createContainerExecutor(conf);
     try {
-      exec.init();
+      exec.init(context);
     } catch (IOException e) {
       throw new YarnRuntimeException("Failed to initialize container executor", e);
     }    
@@ -339,21 +393,14 @@ public class NodeManager extends CompositeService
     // NodeManager level dispatcher
     this.dispatcher = new AsyncDispatcher("NM Event dispatcher");
 
-    dirsHandler = new LocalDirsHandlerService(metrics);
     nodeHealthChecker =
         new NodeHealthCheckerService(
             getNodeHealthScriptRunner(conf), dirsHandler);
     addService(nodeHealthChecker);
 
-    boolean isDistSchedulingEnabled =
-        conf.getBoolean(YarnConfiguration.DIST_SCHEDULING_ENABLED,
-            YarnConfiguration.DEFAULT_DIST_SCHEDULING_ENABLED);
-
-    this.context = createNMContext(containerTokenSecretManager,
-        nmTokenSecretManager, nmStore, isDistSchedulingEnabled, conf);
-
 
     ((NMContext)context).setContainerExecutor(exec);
+    ((NMContext)context).setDeletionService(del);
 
     nodeLabelsProvider = createNodeLabelsProvider(conf);
 
@@ -405,19 +452,17 @@ public class NodeManager extends CompositeService
     // so that we make sure everything is up before registering with RM. 
     addService(nodeStatusUpdater);
     ((NMContext) context).setNodeStatusUpdater(nodeStatusUpdater);
+    nmStore.setNodeStatusUpdater(nodeStatusUpdater);
 
-    super.serviceInit(conf);
-    // TODO add local dirs to del
-  }
-
-  @Override
-  protected void serviceStart() throws Exception {
+    // Do secure login before calling init for added services.
     try {
       doSecureLogin();
     } catch (IOException e) {
       throw new YarnRuntimeException("Failed NodeManager login", e);
     }
-    super.serviceStart();
+
+    super.serviceInit(conf);
+    // TODO add local dirs to del
   }
 
   @Override
@@ -428,6 +473,12 @@ public class NodeManager extends CompositeService
     try {
       super.serviceStop();
       DefaultMetricsSystem.shutdown();
+
+      // Cleanup ResourcePluginManager
+      ResourcePluginManager rpm = context.getResourcePluginManager();
+      if (rpm != null) {
+        rpm.cleanup();
+      }
     } finally {
       // YARN-3641: NM's services stop get failed shouldn't block the
       // release of NMLevelDBStore.
@@ -523,6 +574,8 @@ public class NodeManager extends CompositeService
 
     private Configuration conf = null;
 
+    private NodeManagerMetrics metrics = null;
+
     protected final ConcurrentMap<ApplicationId, Application> applications =
         new ConcurrentHashMap<ApplicationId, Application>();
 
@@ -556,12 +609,17 @@ public class NodeManager extends CompositeService
         logAggregationReportForApps;
     private NodeStatusUpdater nodeStatusUpdater;
     private final boolean isDistSchedulingEnabled;
+    private DeletionService deletionService;
 
     private OpportunisticContainerAllocator containerAllocator;
 
     private ContainerExecutor executor;
 
     private NMTimelinePublisher nmTimelinePublisher;
+
+    private ContainerStateTransitionListener containerStateTransitionListener;
+
+    private ResourcePluginManager resourcePluginManager;
 
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
@@ -751,6 +809,58 @@ public class NodeManager extends CompositeService
 
     public void setContainerExecutor(ContainerExecutor executor) {
       this.executor = executor;
+    }
+
+    @Override
+    public ContainerStateTransitionListener
+        getContainerStateTransitionListener() {
+      return this.containerStateTransitionListener;
+    }
+
+    public void setContainerStateTransitionListener(
+        ContainerStateTransitionListener transitionListener) {
+      this.containerStateTransitionListener = transitionListener;
+    }
+
+    public ResourcePluginManager getResourcePluginManager() {
+      return resourcePluginManager;
+    }
+
+    /**
+     * Returns the {@link NodeManagerMetrics} instance of this node.
+     * This might return a null if the instance was not set to the context.
+     * @return node manager metrics.
+     */
+    @Override
+    public NodeManagerMetrics getNodeManagerMetrics() {
+      return metrics;
+    }
+
+    public void setNodeManagerMetrics(NodeManagerMetrics nmMetrics) {
+      this.metrics = nmMetrics;
+    }
+
+    public void setResourcePluginManager(
+        ResourcePluginManager resourcePluginManager) {
+      this.resourcePluginManager = resourcePluginManager;
+    }
+
+    /**
+     * Return the NM's {@link DeletionService}.
+     *
+     * @return the NM's {@link DeletionService}.
+     */
+    public DeletionService getDeletionService() {
+      return this.deletionService;
+    }
+
+    /**
+     * Set the NM's {@link DeletionService}.
+     *
+     * @param deletionService the {@link DeletionService} to add to the Context.
+     */
+    public void setDeletionService(DeletionService deletionService) {
+      this.deletionService = deletionService;
     }
   }
 

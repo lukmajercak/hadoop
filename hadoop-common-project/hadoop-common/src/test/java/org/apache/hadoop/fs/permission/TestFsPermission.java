@@ -139,6 +139,63 @@ public class TestFsPermission {
   }
 
   @Test
+  public void testFsSymbolicConstructorWithNormalInput() {
+
+    // Test cases for symbolic representation
+
+    //Added both Octal and short representation to show with sticky bit
+
+    assertEquals(777, new FsPermission("+rwx").toOctal());
+    assertEquals(0777, new FsPermission("+rwx").toShort());
+
+    assertEquals(444, new FsPermission("+r").toOctal());
+    assertEquals(0444, new FsPermission("+r").toShort());
+
+    assertEquals(222, new FsPermission("+w").toOctal());
+    assertEquals(0222, new FsPermission("+w").toShort());
+
+    assertEquals(111, new FsPermission("+x").toOctal());
+    assertEquals(0111, new FsPermission("+x").toShort());
+
+    assertEquals(666, new FsPermission("+rw").toOctal());
+    assertEquals(0666, new FsPermission("+rw").toShort());
+
+    assertEquals(333, new FsPermission("+wx").toOctal());
+    assertEquals(0333, new FsPermission("+wx").toShort());
+
+    assertEquals(555, new FsPermission("+rx").toOctal());
+    assertEquals(0555, new FsPermission("+rx").toShort());
+
+
+    // Test case is to test with repeated values in mode.
+    // Repeated value in input will be ignored as duplicate.
+
+    assertEquals(666, new FsPermission("+rwr").toOctal());
+    assertEquals(0666, new FsPermission("+rwr").toShort());
+
+    assertEquals(000, new FsPermission("-rwr").toOctal());
+    assertEquals(0000, new FsPermission("-rwr").toShort());
+
+    assertEquals(1666, new FsPermission("+rwrt").toOctal());
+    assertEquals(01666, new FsPermission("+rwrt").toShort());
+
+    assertEquals(000, new FsPermission("-rwrt").toOctal());
+    assertEquals(0000, new FsPermission("-rwrt").toShort());
+
+    assertEquals(1777, new FsPermission("+rwxt").toOctal());
+    assertEquals(01777, new FsPermission("+rwxt").toShort());
+
+
+    assertEquals(000, new FsPermission("-rt").toOctal());
+    assertEquals(0000, new FsPermission("-rt").toShort());
+
+    assertEquals(000, new FsPermission("-rwx").toOctal());
+    assertEquals(0000, new FsPermission("-rwx").toShort());
+
+  }
+
+
+  @Test
   public void testSymbolicPermission() {
     for (int i = 0; i < SYMBOLIC.length; ++i) {
       short val = 0777;
@@ -205,6 +262,37 @@ public class TestFsPermission {
     return msg.contains("Unable to parse") &&
            msg.contains(umask) &&
            msg.contains("octal or symbolic");
+  }
+
+  /**
+   *  test FsPermission(int) constructor.
+   */
+  @Test
+  public void testIntPermission() {
+    // Octal           Decimals        Masked OCT      Masked DEC
+    // 100644          33188           644             420
+    // 101644          33700           1644            932
+    // 40644           16804           644             420
+    // 41644           17316           1644            932
+    // 644             420             644             420
+    // 1644            932             1644            932
+
+    int[][] permission_mask_maps = {
+      // Octal                 Decimal    Unix Symbolic
+      { 0100644,  0644, 0 },   // 33188    -rw-r--
+      { 0101644, 01644, 1 },   // 33700    -rw-r-t
+      { 040644,   0644, 0 },   // 16804    drw-r--
+      { 041644,  01644, 1 }    // 17316    drw-r-t
+    };
+
+    for (int[] permission_mask_map : permission_mask_maps) {
+      int original_permission_value = permission_mask_map[0];
+      int masked_permission_value = permission_mask_map[1];
+      boolean hasStickyBit = permission_mask_map[2] == 1;
+      FsPermission fsPermission = new FsPermission(original_permission_value);
+      assertEquals(masked_permission_value, fsPermission.toShort());
+      assertEquals(hasStickyBit, fsPermission.getStickyBit());
+    }
   }
 
   // Symbolic umask list is generated in linux shell using by the command:

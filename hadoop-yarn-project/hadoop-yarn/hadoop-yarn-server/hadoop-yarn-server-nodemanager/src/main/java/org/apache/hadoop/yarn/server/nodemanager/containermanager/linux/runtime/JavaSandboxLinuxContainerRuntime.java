@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.Groups;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileged.PrivilegedOperationExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerExecutionException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerRuntimeContext;
@@ -143,7 +144,7 @@ public class JavaSandboxLinuxContainerRuntime
   }
 
   @Override
-  public void initialize(Configuration conf)
+  public void initialize(Configuration conf, Context nmContext)
       throws ContainerExecutionException {
     this.configuration = conf;
     this.sandboxMode =
@@ -151,7 +152,7 @@ public class JavaSandboxLinuxContainerRuntime
             this.configuration.get(YARN_CONTAINER_SANDBOX,
                 YarnConfiguration.DEFAULT_YARN_CONTAINER_SANDBOX));
 
-    super.initialize(conf);
+    super.initialize(conf, nmContext);
   }
 
   /**
@@ -230,7 +231,6 @@ public class JavaSandboxLinuxContainerRuntime
         throw new ContainerExecutionException("hadoop.tmp.dir not set!");
       }
 
-      OutputStream policyOutputStream = null;
       try {
         String containerID = ctx.getExecutionAttribute(CONTAINER_ID_STR);
         initializePolicyDir();
@@ -241,19 +241,19 @@ public class JavaSandboxLinuxContainerRuntime
             Paths.get(policyFileDir.toString(),
             containerID + "-" + NMContainerPolicyUtils.POLICY_FILE),
             POLICY_ATTR);
-        policyOutputStream = Files.newOutputStream(policyFilePath);
 
-        containerPolicies.put(containerID, policyFilePath);
+        try(OutputStream policyOutputStream =
+                Files.newOutputStream(policyFilePath)) {
 
-        NMContainerPolicyUtils.generatePolicyFile(policyOutputStream,
-            localDirs, groupPolicyFiles, resources, configuration);
-        NMContainerPolicyUtils.appendSecurityFlags(
-            commands, env, policyFilePath, sandboxMode);
+          containerPolicies.put(containerID, policyFilePath);
 
+          NMContainerPolicyUtils.generatePolicyFile(policyOutputStream,
+              localDirs, groupPolicyFiles, resources, configuration);
+          NMContainerPolicyUtils.appendSecurityFlags(
+              commands, env, policyFilePath, sandboxMode);
+        }
       } catch (IOException e) {
         throw new ContainerExecutionException(e);
-      } finally {
-        IOUtils.cleanupWithLogger(LOG, policyOutputStream);
       }
     }
   }

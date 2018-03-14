@@ -132,6 +132,46 @@
 
   <property>
     <description>
+      Specify which handler will be used to process PlacementConstraints.
+      Acceptable values are: `placement-processor`, `scheduler` and `disabled`.
+      For a detailed explanation of these values, please refer to documentation.
+    </description>
+    <name>yarn.resourcemanager.placement-constraints.handler</name>
+    <value>disabled</value>
+  </property>
+
+  <property>
+    <description>Number of times to retry placing of rejected SchedulingRequests</description>
+    <name>yarn.resourcemanager.placement-constraints.retry-attempts</name>
+    <value>3</value>
+  </property>
+
+  <property>
+    <description>Constraint Placement Algorithm to be used.</description>
+    <name>yarn.resourcemanager.placement-constraints.algorithm.class</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.constraint.algorithm.DefaultPlacementAlgorithm</value>
+  </property>
+
+  <property>
+    <description>Placement Algorithm Requests Iterator to be used.</description>
+    <name>yarn.resourcemanager.placement-constraints.algorithm.iterator</name>
+    <value>SERIAL</value>
+  </property>
+
+  <property>
+    <description>Threadpool size for the Algorithm used for placement constraint processing.</description>
+    <name>yarn.resourcemanager.placement-constraints.algorithm.pool-size</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <description>Threadpool size for the Scheduler invocation phase of placement constraint processing.</description>
+    <name>yarn.resourcemanager.placement-constraints.scheduler.pool-size</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <description>
       Comma separated class names of ApplicationMasterServiceProcessor
       implementations. The processors will be applied in the order
       they are specified.
@@ -209,6 +249,14 @@
     </description>
     <name>yarn.webapp.ui2.war-file-path</name>
     <value></value>
+  </property>
+
+  <property>
+    <description>
+      Enable services rest api on ResourceManager.
+    </description>
+    <name>yarn.webapp.api-service.enable</name>
+    <value>false</value>
   </property>
 
   <property>
@@ -594,6 +642,24 @@
   </property>
 
   <property>
+    <description>Index at which the RM Delegation Token ids will be split so
+      that the delegation token znodes stored in the zookeeper RM state store
+      will be stored as two different znodes (parent-child). The split is done
+      from the end. For instance, with no split, a delegation token znode will
+      be of the form RMDelegationToken_123456789. If the value of this config is
+      1, the delegation token znode will be broken into two parts:
+      RMDelegationToken_12345678 and 9 respectively with former being the parent
+      node. This config can take values from 0 to 4. 0 means there will be no
+      split. If the value is outside this range, it will be treated as 0 (i.e.
+      no split). A value larger than 0 (up to 4) should be configured if you are
+      running a large number of applications, with long-lived delegation tokens
+      and state store operations (e.g. failover) are failing due to LenError in
+      Zookeeper.</description>
+    <name>yarn.resourcemanager.zk-delegation-token-node.split-index</name>
+    <value>0</value>
+  </property>
+
+  <property>
     <description>Specifies the maximum size of the data that can be stored
       in a znode. Value should be same or less than jute.maxbuffer configured
       in zookeeper. Default value configured is 1MB.</description>
@@ -944,6 +1010,22 @@
     <value>600000</value>
   </property>
 
+  <property>
+    <description>
+    Flag to enable/disable resource profiles
+    </description>
+    <name>yarn.resourcemanager.resource-profiles.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
+    If resource profiles is enabled, source file for the profiles
+    </description>
+    <name>yarn.resourcemanager.resource-profiles.source-file</name>
+    <value>resource-profiles.json</value>
+  </property>
+
   <!-- Node Manager Configuration -->
 
   <property>
@@ -985,6 +1067,12 @@
     <description>who will execute(launch) the containers.</description>
     <name>yarn.nodemanager.container-executor.class</name>
     <value>org.apache.hadoop.yarn.server.nodemanager.DefaultContainerExecutor</value>
+  </property>
+
+  <property>
+    <description>Comma separated List of container state transition listeners.</description>
+    <name>yarn.nodemanager.container-state-transition-listener.classes</name>
+    <value></value>
   </property>
 
   <property>
@@ -1117,6 +1205,14 @@
 
   <property>
     <description>
+      The log level for container localizer while it is an independent process.
+    </description>
+    <name>yarn.nodemanager.container-localizer.log.level</name>
+    <value>INFO</value>
+  </property>
+
+  <property>
+    <description>
       Where to store container logs. An application's localized log directory
       will be found in ${yarn.nodemanager.log-dirs}/application_${appid}.
       Individual containers' log directories will be below this, in directories 
@@ -1226,7 +1322,7 @@
     slowness in launching containers.
     </description>
     <name>yarn.nodemanager.log-container-debug-info.enabled</name>
-    <value>false</value>
+    <value>true</value>
   </property>
 
   <property>
@@ -1250,6 +1346,37 @@
     </description>
     <name>yarn.nodemanager.resource.system-reserved-memory-mb</name>
     <value>-1</value>
+  </property>
+
+  <property>
+    <description>Whether YARN CGroups memory tracking is enabled.</description>
+    <name>yarn.nodemanager.resource.memory.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>Whether YARN CGroups strict memory enforcement is enabled.
+    </description>
+    <name>yarn.nodemanager.resource.memory.enforced</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>If memory limit is enforced, this the percentage of soft limit
+      compared to the memory assigned to the container. If there is memory
+      pressure container memory usage will be pushed back to its soft limit
+      by swapping out memory.
+    </description>
+    <name>yarn.nodemanager.resource.memory.cgroups.soft-limit-percentage</name>
+    <value>90.0</value>
+  </property>
+
+  <property>
+    <description>Container swappiness is the likelihood a page will be swapped
+      out compared to be kept in memory. Value is between 0-100.
+    </description>
+    <name>yarn.nodemanager.resource.memory.cgroups.swappiness</name>
+    <value>0</value>
   </property>
 
   <property>
@@ -1566,7 +1693,8 @@
     or be allowed to consume spare resources if they need them. For example, turning the
     flag on will restrict apps to use only their share of CPU, even if the node has spare
     CPU cycles. The default value is false i.e. use available resources. Please note that
-    turning this flag on may reduce job throughput on the cluster.</description>
+    turning this flag on may reduce job throughput on the cluster. This setting does
+    not apply to other subsystems like memory.</description>
     <name>yarn.nodemanager.linux-container-executor.cgroups.strict-resource-usage</name>
     <value>false</value>
   </property>
@@ -1583,7 +1711,8 @@
     <description>This configuration setting determines the capabilities
       assigned to docker containers when they are launched. While these may not
       be case-sensitive from a docker perspective, it is best to keep these
-      uppercase.</description>
+      uppercase. To run without any capabilites, set this value to
+      "none" or "NONE"</description>
     <name>yarn.nodemanager.runtime.linux.docker.capabilities</name>
     <value>CHOWN,DAC_OVERRIDE,FSETID,FOWNER,MKNOD,NET_RAW,SETGID,SETUID,SETFCAP,SETPCAP,NET_BIND_SERVICE,SYS_CHROOT,KILL,AUDIT_WRITE</value>
   </property>
@@ -1618,6 +1747,41 @@
       networks.</description>
     <name>yarn.nodemanager.runtime.linux.docker.default-container-network</name>
     <value>host</value>
+  </property>
+
+  <property>
+    <description>This configuration setting determines whether the host's PID
+      namespace is allowed for docker containers on this cluster.
+      Use with care.</description>
+    <name>yarn.nodemanager.runtime.linux.docker.host-pid-namespace.allowed</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>Property to enable docker user remapping</description>
+    <name>yarn.nodemanager.runtime.linux.docker.enable-userremapping.allowed</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>lower limit for acceptable uids of user remapped user</description>
+    <name>yarn.nodemanager.runtime.linux.docker.userremapping-uid-threshold</name>
+    <value>1</value>
+  </property>
+
+
+  <property>
+    <description>lower limit for acceptable gids of user remapped user</description>
+    <name>yarn.nodemanager.runtime.linux.docker.userremapping-gid-threshold</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <description>Whether or not users are allowed to request that Docker
+      containers honor the debug deletion delay. This is useful for
+      troubleshooting Docker container related launch failures.</description>
+    <name>yarn.nodemanager.runtime.linux.docker.delayed-removal.allowed</name>
+    <value>false</value>
   </property>
 
   <property>
@@ -1706,7 +1870,7 @@
   <property>
     <description>Max time to wait for a process to come up when trying to cleanup a container</description>
     <name>yarn.nodemanager.process-kill-wait.ms</name>
-    <value>2000</value>
+    <value>5000</value>
   </property>
 
   <property>
@@ -1828,10 +1992,10 @@
   <property>
     <description>
     Adjustment to the container OS scheduling priority.  In Linux, passed
-    directly to the nice command.
+    directly to the nice command. If unspecified then containers are launched
+    without any explicit OS priority.
     </description>
     <name>yarn.nodemanager.container-executor.os.sched.priority.adjustment</name>
-    <value>0</value>
   </property>
 
   <property>
@@ -2758,7 +2922,20 @@
    <value>300</value>
   </property>
 
+  <property>
+    <description>The registry base directory for federation.</description>
+    <name>yarn.federation.registry.base-dir</name>
+    <value>yarnfederation/</value>
+  </property>
+
   <!-- Other Configuration -->
+
+  <property>
+    <description>The registry implementation to use.</description>
+    <name>yarn.registry.class</name>
+    <value>org.apache.hadoop.registry.client.impl.FSRegistryOperationsService</value>
+  </property>
+
   <property>
     <description>The interval that the yarn client library uses to poll the
     completion status of the asynchronous API of application client protocol.
@@ -2921,6 +3098,14 @@
 
   <property>
     <description>
+    Whether AMRMProxy HA is enabled.
+    </description>
+    <name>yarn.nodemanager.amrmproxy.ha.enable</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
     Setting that controls whether distributed scheduling is enabled.
     </description>
     <name>yarn.nodemanager.distributed-scheduling.enabled</name>
@@ -2999,6 +3184,15 @@
     </description>
     <name>yarn.resourcemanager.nm-container-queuing.max-queue-wait-time-ms</name>
     <value>100</value>
+  </property>
+
+  <property>
+    <description>
+    Use container pause as the preemption policy over kill in the container
+    queue at a NodeManager.
+    </description>
+    <name>yarn.nodemanager.opportunistic-containers-use-pause-for-preemption</name>
+    <value>false</value>
   </property>
 
   <property>
@@ -3295,6 +3489,277 @@
     </description>
     <name>yarn.timeline-service.entity-group-fs-store.with-user-dir</name>
     <value>false</value>
+  </property>
+
+  <!-- resource types configuration -->
+  <property>
+    <name>yarn.resource-types</name>
+    <value></value>
+    <description>
+    The resource types to be used for scheduling. Use resource-types.xml
+    to specify details about the individual resource types.
+    </description>
+  </property>
+ 
+  <property>
+    <name>yarn.resourcemanager.display.per-user-apps</name>
+    <value>false</value>
+      <description>
+        Flag to enable display of applications per user as an admin
+        configuration.
+      </description>
+  </property>
+
+  <property>
+    <description>
+      The type of configuration store to use for scheduler configurations.
+      Default is "file", which uses file based capacity-scheduler.xml to
+      retrieve and change scheduler configuration. To enable API based
+      scheduler configuration, use either "memory" (in memory storage, no
+      persistence across restarts), "leveldb" (leveldb based storage), or
+      "zk" (zookeeper based storage). API based configuration is only useful
+      when using a scheduler which supports mutable configuration. Currently
+      only capacity scheduler supports this.
+    </description>
+    <name>yarn.scheduler.configuration.store.class</name>
+    <value>file</value>
+  </property>
+
+  <property>
+    <description>
+      The class to use for configuration mutation ACL policy if using a mutable
+      configuration provider. Controls whether a mutation request is allowed.
+      The DefaultConfigurationMutationACLPolicy checks if the requestor is a
+      YARN admin.
+    </description>
+    <name>yarn.scheduler.configuration.mutation.acl-policy.class</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.scheduler.DefaultConfigurationMutationACLPolicy</value>
+  </property>
+
+  <property>
+    <description>
+      The storage path for LevelDB implementation of configuration store,
+      when yarn.scheduler.configuration.store.class is configured to be
+      "leveldb".
+    </description>
+    <name>yarn.scheduler.configuration.leveldb-store.path</name>
+    <value>${hadoop.tmp.dir}/yarn/system/confstore</value>
+  </property>
+
+  <property>
+    <description>
+      The compaction interval for LevelDB configuration store in secs,
+      when yarn.scheduler.configuration.store.class is configured to be
+      "leveldb". Default is one day.
+    </description>
+    <name>yarn.scheduler.configuration.leveldb-store.compaction-interval-secs</name>
+    <value>86400</value>
+  </property>
+
+  <property>
+    <description>
+      The max number of configuration change log entries kept in config
+      store, when yarn.scheduler.configuration.store.class is configured to be
+      "leveldb" or "zk". Default is 1000 for either.
+    </description>
+    <name>yarn.scheduler.configuration.store.max-logs</name>
+    <value>1000</value>
+  </property>
+
+  <property>
+    <description>
+      ZK root node path for configuration store when using zookeeper-based
+      configuration store.
+    </description>
+    <name>yarn.scheduler.configuration.zk-store.parent-path</name>
+    <value>/confstore</value>
+  </property>
+
+  <property>
+    <description>
+      Provides an option for client to load supported resource types from RM
+      instead of depending on local resource-types.xml file.
+    </description>
+    <name>yarn.client.load.resource-types.from-server</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
+      When yarn.nodemanager.resource.gpu.allowed-gpu-devices=auto specified,
+      YARN NodeManager needs to run GPU discovery binary (now only support
+      nvidia-smi) to get GPU-related information.
+      When value is empty (default), YARN NodeManager will try to locate
+      discovery executable itself.
+      An example of the config value is: /usr/local/bin/nvidia-smi
+    </description>
+    <name>yarn.nodemanager.resource-plugins.gpu.path-to-discovery-executables</name>
+    <value></value>
+  </property>
+
+  <property>
+    <description>
+      Enable additional discovery/isolation of resources on the NodeManager,
+      split by comma. By default, this is empty.
+      Acceptable values: { "yarn-io/gpu", "yarn-io/fpga"}.
+    </description>
+    <name>yarn.nodemanager.resource-plugins</name>
+    <value></value>
+  </property>
+
+  <property>
+    <description>
+      Specify GPU devices which can be managed by YARN NodeManager, split by comma
+      Number of GPU devices will be reported to RM to make scheduling decisions.
+      Set to auto (default) let YARN automatically discover GPU resource from
+      system.
+
+      Manually specify GPU devices if auto detect GPU device failed or admin
+      only want subset of GPU devices managed by YARN. GPU device is identified
+      by their minor device number and index. A common approach to get minor
+      device number of GPUs is using "nvidia-smi -q" and search "Minor Number"
+      output.
+
+      When manual specify minor numbers, admin needs to include indice of GPUs
+      as well, format is index:minor_number[,index:minor_number...]. An example
+      of manual specification is "0:0,1:1,2:2,3:4" to allow YARN NodeManager to
+      manage GPU devices with indice 0/1/2/3 and minor number 0/1/2/4.
+      numbers .
+    </description>
+    <name>yarn.nodemanager.resource-plugins.gpu.allowed-gpu-devices</name>
+    <value>auto</value>
+  </property>
+
+  <property>
+    <description>
+      Specify docker command plugin for GPU. By default uses Nvidia docker V1.
+    </description>
+    <name>yarn.nodemanager.resource-plugins.gpu.docker-plugin</name>
+    <value>nvidia-docker-v1</value>
+  </property>
+
+  <property>
+    <description>
+      Specify end point of nvidia-docker-plugin.
+      Please find documentation: https://github.com/NVIDIA/nvidia-docker/wiki
+      For more details.
+    </description>
+    <name>yarn.nodemanager.resource-plugins.gpu.docker-plugin.nvidia-docker-v1.endpoint</name>
+    <value>http://localhost:3476/v1.0/docker/cli</value>
+  </property>
+
+  <property>
+    <description>
+      Specify one vendor plugin to handle FPGA devices discovery/IP download/configure.
+      Only IntelFpgaOpenclPlugin is supported by default.
+      We only allow one NM configured with one vendor FPGA plugin now since the end user can put the same
+      vendor's cards in one host. And this also simplify our design.
+    </description>
+    <name>yarn.nodemanager.resource-plugins.fpga.vendor-plugin.class</name>
+    <value>org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.fpga.IntelFpgaOpenclPlugin</value>
+  </property>
+
+  <property>
+    <description>
+      When yarn.nodemanager.resource.fpga.allowed-fpga-devices=auto specified,
+      YARN NodeManager needs to run FPGA discovery binary (now only support
+      IntelFpgaOpenclPlugin) to get FPGA information.
+      When value is empty (default), YARN NodeManager will try to locate
+      discovery executable from vendor plugin's preference
+    </description>
+    <name>yarn.nodemanager.resource-plugins.fpga.path-to-discovery-executables</name>
+    <value></value>
+  </property>
+
+  <property>
+    <description>
+      Specify FPGA devices which can be managed by YARN NodeManager, split by comma
+      Number of FPGA devices will be reported to RM to make scheduling decisions.
+      Set to auto (default) let YARN automatically discover FPGA resource from
+      system.
+
+      Manually specify FPGA devices if admin only want subset of FPGA devices managed by YARN.
+      At present, since we can only configure one major number in c-e.cfg, FPGA device is
+      identified by their minor device number. A common approach to get minor
+      device number of FPGA is using "aocl diagnose" and check uevent with device name.
+    </description>
+    <name>yarn.nodemanager.resource-plugins.fpga.allowed-fpga-devices</name>
+    <value>0,1</value>
+  </property>
+
+  <property>
+    <description>The http address of the timeline reader web application.</description>
+    <name>yarn.timeline-service.reader.webapp.address</name>
+    <value>${yarn.timeline-service.webapp.address}</value>
+  </property>
+
+  <property>
+    <description>The https address of the timeline reader web application.</description>
+    <name>yarn.timeline-service.reader.webapp.https.address</name>
+    <value>${yarn.timeline-service.webapp.https.address}</value>
+  </property>
+
+  <property>
+    <description>
+      The actual address timeline reader will bind to. If this optional address is
+      set, the reader server will bind to this address and the port specified in
+      yarn.timeline-service.reader.webapp.address.
+      This is most useful for making the service listen to all interfaces by setting to
+      0.0.0.0.
+    </description>
+    <name>yarn.timeline-service.reader.bind-host</name>
+    <value></value>
+  </property>
+
+  <property>
+    <description>
+    Whether to enable the NUMA awareness for containers in Node Manager.
+    </description>
+    <name>yarn.nodemanager.numa-awareness.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
+    Whether to read the NUMA topology from the system or from the
+    configurations. If the value is true then NM reads the NUMA topology from
+    system using the command 'numactl --hardware'. If the value is false then NM
+    reads the topology from the configurations
+    'yarn.nodemanager.numa-awareness.node-ids'(for node id's),
+    'yarn.nodemanager.numa-awareness.&lt;NODE_ID&gt;.memory'(for each node memory),
+    'yarn.nodemanager.numa-awareness.&lt;NODE_ID&gt;.cpus'(for each node cpus).
+    </description>
+    <name>yarn.nodemanager.numa-awareness.read-topology</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
+    NUMA node id's in the form of comma separated list. Memory and No of CPUs
+    will be read using the properties
+    'yarn.nodemanager.numa-awareness.&lt;NODE_ID&gt;.memory' and
+    'yarn.nodemanager.numa-awareness.&lt;NODE_ID&gt;.cpus' for each id specified
+    in this value. This property value will be read only when
+    'yarn.nodemanager.numa-awareness.read-topology=false'.
+
+    For example, if yarn.nodemanager.numa-awareness.node-ids=0,1
+    then need to specify memory and cpus for node id's '0' and '1' like below,
+    yarn.nodemanager.numa-awareness.0.memory=73717
+    yarn.nodemanager.numa-awareness.0.cpus=4
+    yarn.nodemanager.numa-awareness.1.memory=73727
+    yarn.nodemanager.numa-awareness.1.cpus=4
+    </description>
+    <name>yarn.nodemanager.numa-awareness.node-ids</name>
+    <value></value>
+  </property>
+
+  <property>
+    <description>
+    The numactl command path which controls NUMA policy for processes or
+    shared memory.
+    </description>
+    <name>yarn.nodemanager.numa-awareness.numactl.cmd</name>
+    <value>/usr/bin/numactl</value>
   </property>
 
 </configuration>

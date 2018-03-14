@@ -32,7 +32,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeCommand;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
@@ -49,6 +52,9 @@ import org.mockito.stubbing.Answer;
 
 import com.google.common.base.Preconditions;
 
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doAnswer;
+
 /**
  * An internal-facing only collection of test utilities for the DataNode. This
  * is to ensure that test-scope dependencies aren't inadvertently leaked
@@ -62,6 +68,27 @@ public class InternalDataNodeTestUtils {
   public static DatanodeRegistration
   getDNRegistrationForBP(DataNode dn, String bpid) throws IOException {
     return dn.getDNRegistrationForBP(bpid);
+  }
+
+  /**
+   * This method is used to mock the data node block pinning API.
+   *
+   * @param dn datanode
+   * @param pinned true if the block is pinned, false otherwise
+   * @throws IOException
+   */
+  public static void mockDatanodeBlkPinning(final DataNode dn,
+      final boolean pinned) throws IOException {
+    final FsDatasetSpi<? extends FsVolumeSpi> data = dn.data;
+    dn.data = Mockito.spy(data);
+
+    doAnswer(new Answer<Object>() {
+      public Object answer(InvocationOnMock invocation) throws IOException {
+        // Bypass the argument to FsDatasetImpl#getPinning to show that
+        // the block is pinned.
+        return pinned;
+      }
+    }).when(dn.data).getPinning(any(ExtendedBlock.class));
   }
 
   /**
@@ -105,11 +132,8 @@ public class InternalDataNodeTestUtils {
    *
    * @throws IOException
    */
-  public static DataNode startDNWithMockNN(
-      Configuration conf,
-      final InetSocketAddress nnSocketAddr,
-      final InetSocketAddress nnServiceAddr,
-      final String dnDataDir)
+  public static DataNode startDNWithMockNN(Configuration conf,
+      final InetSocketAddress nnSocketAddr, final String dnDataDir)
       throws IOException {
 
     FileSystem.setDefaultUri(conf, "hdfs://" + nnSocketAddr.getHostName() + ":"
@@ -152,7 +176,7 @@ public class InternalDataNodeTestUtils {
       @Override
       DatanodeProtocolClientSideTranslatorPB connectToNN(
           InetSocketAddress nnAddr) throws IOException {
-        Assert.assertEquals(nnServiceAddr, nnAddr);
+        Assert.assertEquals(nnSocketAddr, nnAddr);
         return namenode;
       }
     };

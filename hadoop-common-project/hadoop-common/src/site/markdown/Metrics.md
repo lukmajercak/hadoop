@@ -268,6 +268,24 @@ The server-side metrics for a journal from the JournalNode's perspective. Each m
 | `Syncs3600s90thPercentileLatencyMicros` | The 90th percentile of sync latency in microseconds (1 hour granularity) |
 | `Syncs3600s95thPercentileLatencyMicros` | The 95th percentile of sync latency in microseconds (1 hour granularity) |
 | `Syncs3600s99thPercentileLatencyMicros` | The 99th percentile of sync latency in microseconds (1 hour granularity) |
+| `NumTransactionsBatchedInSync60sNumOps` | Number of times transactions were batched in sync operation (1 minute granularity) |
+| `NumTransactionsBatchedInSync60s50thPercentileLatencyMicros` | The 50th percentile of transactions batched in sync count (1 minute granularity) |
+| `NumTransactionsBatchedInSync60s75thPercentileLatencyMicros` | The 75th percentile of transactions batched in sync count (1 minute granularity) |
+| `NumTransactionsBatchedInSync60s90thPercentileLatencyMicros` | The 90th percentile of transactions batched in sync count (1 minute granularity) |
+| `NumTransactionsBatchedInSync60s95thPercentileLatencyMicros` | The 95th percentile of transactions batched in sync count (1 minute granularity) |
+| `NumTransactionsBatchedInSync60s99thPercentileLatencyMicros` | The 99th percentile of transactions batched in sync count (1 minute granularity) |
+| `NumTransactionsBatchedInSync300sNumOps` | Number of times transactions were batched in sync operation (5 minutes granularity) |
+| `NumTransactionsBatchedInSync300s50thPercentileLatencyMicros` | The 50th percentile of transactions batched in sync count (5 minutes granularity) |
+| `NumTransactionsBatchedInSync300s75thPercentileLatencyMicros` | The 75th percentile of transactions batched in sync count (5 minutes granularity) |
+| `NumTransactionsBatchedInSync300s90thPercentileLatencyMicros` | The 90th percentile of transactions batched in sync count (5 minutes granularity) |
+| `NumTransactionsBatchedInSync300s95thPercentileLatencyMicros` | The 95th percentile of transactions batched in sync count (5 minutes granularity) |
+| `NumTransactionsBatchedInSync300s99thPercentileLatencyMicros` | The 99th percentile of transactions batched in sync count (5 minutes granularity) |
+| `NumTransactionsBatchedInSync3600sNumOps` | Number of times transactions were batched in sync operation (1 hour granularity) |
+| `NumTransactionsBatchedInSync3600s50thPercentileLatencyMicros` | The 50th percentile of transactions batched in sync count (1 hour granularity) |
+| `NumTransactionsBatchedInSync3600s75thPercentileLatencyMicros` | The 75th percentile of transactions batched in sync count (1 hour granularity) |
+| `NumTransactionsBatchedInSync3600s90thPercentileLatencyMicros` | The 90th percentile of transactions batched in sync count (1 hour granularity) |
+| `NumTransactionsBatchedInSync3600s95thPercentileLatencyMicros` | The 95th percentile of transactions batched in sync count (1 hour granularity) |
+| `NumTransactionsBatchedInSync3600s99thPercentileLatencyMicros` | The 99th percentile of transactions batched in sync count (1 hour granularity) |
 | `BatchesWritten` | Total number of batches written since startup |
 | `TxnsWritten` | Total number of transactions written since startup |
 | `BytesWritten` | Total number of bytes written since startup |
@@ -400,6 +418,42 @@ contains tags such as Hostname as additional information along with metrics.
 | `TotalFileIoErrors` | Total number (monotonically increasing) of file io error operations |
 | `FileIoErrorRateNumOps` | The number of file io error operations within an interval time of metric |
 | `FileIoErrorRateAvgTime` | It measures the mean time in milliseconds from the start of an operation to hitting a failure |
+
+RouterRPCMetrics
+----------------
+RouterRPCMetrics shows the statistics of the Router component in Router-based federation.
+
+| Name | Description |
+|:---- |:---- |
+| `ProcessingOp` | Number of operations the Router processed internally |
+| `ProxyOp` | Number of operations the Router proxied to a Namenode |
+| `ProxyOpFailureStandby` | Number of operations to fail to reach NN |
+| `ProxyOpFailureCommunicate` | Number of operations to hit a standby NN |
+| `ProxyOpNotImplemented` | Number of operations not implemented |
+| `RouterFailureStateStore` | Number of failed requests due to State Store unavailable |
+| `RouterFailureReadOnly` | Number of failed requests due to read only mount point |
+| `RouterFailureLocked` | Number of failed requests due to locked path |
+| `RouterFailureSafemode` | Number of failed requests due to safe mode |
+| `ProcessingNumOps` | Number of operations the Router processed internally within an interval time of metric |
+| `ProcessingAvgTime` | Average time for the Router to process operations in nanoseconds |
+| `ProxyNumOps` | Number of times of that the Router to proxy operations to the Namenodes within an interval time of metric |
+| `ProxyAvgTime` | Average time for the Router to proxy operations to the Namenodes in nanoseconds |
+
+StateStoreMetrics
+-----------------
+StateStoreMetrics shows the statistics of the State Store component in Router-based federation.
+
+| Name | Description |
+|:---- |:---- |
+| `ReadsNumOps` | Number of GET transactions for State Store within an interval time of metric |
+| `ReadsAvgTime` | Average time of GET transactions for State Store in milliseconds |
+| `WritesNumOps` | Number of PUT transactions for State Store within an interval time of metric |
+| `WritesAvgTime` | Average time of PUT transactions for State Store in milliseconds |
+| `RemovesNumOps` | Number of REMOVE transactions for State Store within an interval time of metric |
+| `RemovesAvgTime` | Average time of REMOVE transactions for State Store in milliseconds |
+| `FailuresNumOps` | Number of failed transactions for State Store within an interval time of metric |
+| `FailuresAvgTime` | Average time of failed transactions for State Store in milliseconds |
+| `Cache`*BaseRecord*`Size` | Number of store records to cache in State Store |
 
 yarn context
 ============
