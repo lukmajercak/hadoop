@@ -102,7 +102,6 @@ import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -1129,8 +1128,8 @@ public class TestDistributedFileSystem {
       Collections.addAll(storageIds, ids);
       assertEquals("Unexpected num storage ids", repl, storageIds.size());
       // Make sure these are all valid storage IDs
-      assertTrue("Unknown storage IDs found!", dnStorageIds.containsAll
-          (storageIds));
+      assertTrue("Unknown storage IDs found!",
+          dnStorageIds.containsAll(storageIds));
       // Check storage types are the default, since we didn't set any
       StorageType[] types = loc.getStorageTypes();
       assertEquals("Unexpected num storage types", repl, types.length);
@@ -1296,7 +1295,7 @@ public class TestDistributedFileSystem {
     // Write 10 MB to a dummy socket to ensure the write times out
     ServerSocket socket = new ServerSocket(0);
     Peer peer = dfs.getClient().newConnectedPeer(
-      (InetSocketAddress) socket.getLocalSocketAddress(), null, null);
+        (InetSocketAddress) socket.getLocalSocketAddress(), null, null);
     long start = Time.now();
     try {
       byte[] buf = new byte[10 * 1024 * 1024];
@@ -1323,13 +1322,13 @@ public class TestDistributedFileSystem {
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
     FileSystem fs = cluster.getFileSystem();
     // create file under root
-    FSDataOutputStream File1 = fs.create(new Path("/File1"));
-    File1.write("hi".getBytes());
-    File1.close();
+    FSDataOutputStream file1 = fs.create(new Path("/File1"));
+    file1.write("hi".getBytes());
+    file1.close();
     // create file under sub-folder
-    FSDataOutputStream File2 = fs.create(new Path("/Folder1/File2"));
-    File2.write("hi".getBytes());
-    File2.close();
+    FSDataOutputStream file2 = fs.create(new Path("/Folder1/File2"));
+    file2.write("hi".getBytes());
+    file2.close();
     // getUsed(Path) should return total len of all the files from a path
     assertEquals(2, fs.getUsed(new Path("/Folder1")));
     //getUsed() should return total length of all files in filesystem
@@ -1426,7 +1425,7 @@ public class TestDistributedFileSystem {
         content.getBytes());
 
     try (FSDataOutputStream out = fs.createFile(testFilePath).overwrite(false)
-      .build()) {
+        .build()) {
       fail("it should fail to overwrite an existing file");
     } catch (FileAlreadyExistsException e) {
       // As expected, ignore.
@@ -1442,7 +1441,7 @@ public class TestDistributedFileSystem {
         fs.exists(new Path("/parent")));
 
     try (FSDataOutputStream out = fs.createFile(nonParentFile).recursive()
-      .build()) {
+        .build()) {
       out.write(1);
     }
     assertTrue("parent directory has not been created",
