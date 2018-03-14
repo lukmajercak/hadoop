@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 
 import com.google.common.base.Supplier;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.DF;
 import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -47,6 +48,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TestFsVolumeList {
 
@@ -290,7 +292,7 @@ public class TestFsVolumeList {
         .build();
     assertEquals(2000, volume2.getReserved());
     assertEquals(2000, volume2.getCapacity());
-    assertEquals(-1000, volume2.getAvailable());
+    assertEquals(0, volume2.getAvailable());
     FsVolumeImpl volume3 = new FsVolumeImplBuilder()
         .setConf(conf)
         .setDataset(dataset)

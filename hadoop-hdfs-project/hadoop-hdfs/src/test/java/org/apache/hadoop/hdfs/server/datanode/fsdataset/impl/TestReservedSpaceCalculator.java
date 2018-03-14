@@ -154,7 +154,7 @@ public class TestReservedSpaceCalculator {
   }
 
   private void checkReserved(StorageType storageType,
-                             long totalCapacity, long reservedExpected) {
+      long totalCapacity, long reservedExpected) {
     when(usage.getCapacity()).thenReturn(totalCapacity);
 
     reserved = new ReservedSpaceCalculatorBuilder(conf).setUsage(usage)
