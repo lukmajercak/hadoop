@@ -40,6 +40,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
@@ -226,5 +228,87 @@ public class TestFsVolumeList {
     long expectedNonDfsUsage =
         actualNonDfsUsage - duReserved;
     assertEquals(expectedNonDfsUsage, spyVolume.getNonDfsUsed());
+  }
+
+  @Test
+  public void testDfsReservedPercentageForDifferentStorageTypes()
+      throws IOException {
+    Configuration conf = new Configuration();
+    conf.set(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY, "PERCENTAGE");
+    conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY, 15);
+
+    File volDir = new File(baseDir, "volume-0");
+    volDir.mkdirs();
+
+    DF usage = mock(DF.class);
+    when(usage.getCapacity()).thenReturn(4000L);
+    when(usage.getAvailable()).thenReturn(1000L);
+
+    // when storage type reserved is not configured, should consider
+    // dfs.datanode.du.reserved.pct
+    FsVolumeImpl volume = new FsVolumeImplBuilder()
+        .setConf(conf)
+        .setDataset(dataset)
+        .setStorageID("storage-id")
+        .setStorageDirectory(
+            new StorageDirectory(StorageLocation.parse(
+                "[RAM_DISK]" + volDir.getPath())))
+        .setUsage(usage)
+        .build();
+
+    assertEquals(600, volume.getReserved());
+    assertEquals(3400, volume.getCapacity());
+    assertEquals(400, volume.getAvailable());
+
+    // when storage type reserved is configured.
+    conf.setLong(
+        DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY + "."
+            + StringUtils.toLowerCase(StorageType.RAM_DISK.toString()), 10);
+    conf.setLong(
+        DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY + "."
+            + StringUtils.toLowerCase(StorageType.SSD.toString()), 50);
+    FsVolumeImpl volume1 = new FsVolumeImplBuilder()
+        .setConf(conf)
+        .setDataset(dataset)
+        .setStorageID("storage-id")
+        .setStorageDirectory(
+            new StorageDirectory(StorageLocation.parse(
+                "[RAM_DISK]" + volDir.getPath())))
+        .setUsage(usage)
+        .build();
+    assertEquals(400, volume1.getReserved());
+    assertEquals(3600, volume1.getCapacity());
+    assertEquals(600, volume1.getAvailable());
+    FsVolumeImpl volume2 = new FsVolumeImplBuilder()
+        .setConf(conf)
+        .setDataset(dataset)
+        .setStorageID("storage-id")
+        .setStorageDirectory(
+            new StorageDirectory(StorageLocation.parse(
+                "[SSD]" + volDir.getPath())))
+        .setUsage(usage)
+        .build();
+    assertEquals(2000, volume2.getReserved());
+    assertEquals(2000, volume2.getCapacity());
+    assertEquals(-1000, volume2.getAvailable());
+    FsVolumeImpl volume3 = new FsVolumeImplBuilder()
+        .setConf(conf)
+        .setDataset(dataset)
+        .setStorageID("storage-id")
+        .setStorageDirectory(
+            new StorageDirectory(StorageLocation.parse(
+                "[DISK]" + volDir.getPath())))
+        .setUsage(usage)
+        .build();
+    assertEquals(600, volume3.getReserved());
+    FsVolumeImpl volume4 = new FsVolumeImplBuilder()
+        .setConf(conf)
+        .setDataset(dataset)
+        .setStorageID("storage-id")
+        .setStorageDirectory(
+            new StorageDirectory(StorageLocation.parse(volDir.getPath())))
+        .setUsage(usage)
+        .build();
+    assertEquals(600, volume4.getReserved());
   }
 }
