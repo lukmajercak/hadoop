@@ -1304,7 +1304,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
     lowRedundancyBlocks.add(block2, 2, 0, 0, 7);
 
     // Adding QUEUE_LOW_REDUNDANCY block
-    lowRedundancyBlocks.add(block3, 2, 0, 0, 6);
+    lowRedundancyBlocks.add(block3, 4, 0, 0, 6);
 
     List<List<BlockInfo>> chosenBlocks;
 
@@ -1315,7 +1315,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
 
     // Increasing the replications will move the block down a
     // priority.  This simulates a replica being completed in between checks.
-    lowRedundancyBlocks.update(block1, block1CurReplicas+1, 0, 0,
+    lowRedundancyBlocks.update(block1, block1CurReplicas+3, 0, 0,
         block1ExpectedReplicas, 1, 0);
 
     // Choose 1 block from lowRedundancyBlocks. Then it should pick 1 block

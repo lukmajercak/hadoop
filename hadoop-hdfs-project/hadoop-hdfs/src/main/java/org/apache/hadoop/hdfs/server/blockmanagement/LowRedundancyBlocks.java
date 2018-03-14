@@ -228,8 +228,9 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
       // only one replica, highest risk of loss
       // highest priority
       return QUEUE_HIGHEST_PRIORITY;
-    } else if ((curReplicas * 3) < expectedReplicas) {
-      //can only afford one replica loss
+    } else if ((curReplicas * 2) <= expectedReplicas || curReplicas == 2) {
+      //there is less than a half as many blocks as requested,
+      //OR we only have 2 replicas;
       //this is considered very insufficiently redundant blocks.
       return QUEUE_VERY_LOW_REDUNDANCY;
     } else {
