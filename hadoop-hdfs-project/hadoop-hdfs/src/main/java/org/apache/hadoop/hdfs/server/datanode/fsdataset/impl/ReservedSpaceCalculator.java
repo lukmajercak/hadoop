@@ -22,35 +22,19 @@ import org.apache.hadoop.fs.DF;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.util.StringUtils;
 
+import java.lang.reflect.Constructor;
+
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY;
 
 /**
  * Used for calculating file system space reserved for non-HDFS data.
  */
 public abstract class ReservedSpaceCalculator {
-
-  /**
-   * Different ways of calculating the reserved space:
-   * 1. ABSOLUTE
-   *  - based on absolute number of reserved space
-   * 2. PERCENTAGE
-   *  - based on percentage of total capacity in the storage
-   * 3. CONSERVATIVE
-   *  - calculates both of the above and takes the one that
-   *    will yield more reserved space
-   * 4. AGGRESSIVE
-   *  - calculates 1. 2. and takes the one that will yield less reserved space
-   */
-  public enum Type {
-    ABSOLUTE,
-    PERCENTAGE,
-    CONSERVATIVE,
-    AGGRESSIVE
-  }
 
   public static class ReservedSpaceCalculatorBuilder {
 
@@ -74,25 +58,22 @@ public abstract class ReservedSpaceCalculator {
     }
 
     ReservedSpaceCalculator build() {
-      Type type = Type.ABSOLUTE;
       try {
-        type = conf.getEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
-            Type.ABSOLUTE);
-      } catch (IllegalArgumentException e) {
-        FsVolumeImpl.LOG.warn("Invalid type for reserved space calculation " +
-            "switching to ABSOLUTE.");
-      }
+        Class<? extends ReservedSpaceCalculator> clazz = conf.getClass(
+            DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+            DFS_DATANODE_DU_RESERVED_TYPE_DEFAULT,
+            ReservedSpaceCalculator.class);
 
-      switch (type) {
-        case PERCENTAGE:
-          return new Percentage(conf, usage, storageType);
-        case CONSERVATIVE:
-          return new Conservative(conf, usage, storageType);
-        case AGGRESSIVE:
-          return new Aggressive(conf, usage, storageType);
-        default:
-          return new Absolute(conf, usage, storageType);
+        Constructor constructor = clazz.getConstructor(
+            Configuration.class, DF.class, StorageType.class);
+
+        return (ReservedSpaceCalculator) constructor.newInstance(
+            conf, usage, storageType);
+      } catch (Exception e) {
+        FsVolumeImpl.LOG.warn("Exception when instantiating " +
+            "ReservedSpaceCalculator, switching to Absolute.", e);
       }
+      return new ReservedSpaceCalculatorAbsolute(conf, usage, storageType);
     }
   }
 
@@ -101,7 +82,7 @@ public abstract class ReservedSpaceCalculator {
   protected final StorageType storageType;
 
   ReservedSpaceCalculator(Configuration conf, DF usage,
-                          StorageType storageType) {
+      StorageType storageType) {
     this.usage = usage;
     this.conf = conf;
     this.storageType = storageType;
@@ -120,11 +101,16 @@ public abstract class ReservedSpaceCalculator {
   abstract long getReserved();
 
 
-  private static class Absolute extends ReservedSpaceCalculator {
+  /**
+   * Based on absolute number of reserved bytes.
+   */
+  public static class ReservedSpaceCalculatorAbsolute extends
+      ReservedSpaceCalculator {
 
     private final long reservedBytes;
 
-    Absolute(Configuration conf, DF usage, StorageType storageType) {
+    public ReservedSpaceCalculatorAbsolute(Configuration conf, DF usage,
+        StorageType storageType) {
       super(conf, usage, storageType);
       this.reservedBytes = getReservedFromConf(DFS_DATANODE_DU_RESERVED_KEY,
           DFS_DATANODE_DU_RESERVED_DEFAULT);
@@ -136,11 +122,16 @@ public abstract class ReservedSpaceCalculator {
     }
   }
 
-  private static class Percentage extends ReservedSpaceCalculator {
+  /**
+   * Based on percentage of total capacity in the storage.
+   */
+  public static class ReservedSpaceCalculatorPercentage extends
+      ReservedSpaceCalculator {
 
     private final long reservedPct;
 
-    Percentage(Configuration conf, DF usage, StorageType storageType) {
+    public ReservedSpaceCalculatorPercentage(Configuration conf, DF usage,
+        StorageType storageType) {
       super(conf, usage, storageType);
       this.reservedPct = getReservedFromConf(
           DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY,
@@ -153,12 +144,18 @@ public abstract class ReservedSpaceCalculator {
     }
   }
 
-  private static class Conservative extends ReservedSpaceCalculator {
+  /**
+   * Calculates absolute and percentage based reserved space and
+   * picks the one that will yield more reserved space.
+   */
+  public static class ReservedSpaceCalculatorConservative extends
+      ReservedSpaceCalculator {
 
     final long reservedBytes;
     final long reservedPct;
 
-    Conservative(Configuration conf, DF usage, StorageType storageType) {
+    public ReservedSpaceCalculatorConservative(Configuration conf, DF usage,
+        StorageType storageType) {
       super(conf, usage, storageType);
       this.reservedBytes = getReservedFromConf(DFS_DATANODE_DU_RESERVED_KEY,
           DFS_DATANODE_DU_RESERVED_DEFAULT);
@@ -174,9 +171,15 @@ public abstract class ReservedSpaceCalculator {
     }
   }
 
-  private static class Aggressive extends Conservative {
+  /**
+   * Calculates absolute and percentage based reserved space and
+   * picks the one that will yield less reserved space.
+   */
+  public static class ReservedSpaceCalculatorAggressive extends
+      ReservedSpaceCalculatorConservative {
 
-    Aggressive(Configuration conf, DF usage, StorageType storageType) {
+    public ReservedSpaceCalculatorAggressive(Configuration conf, DF usage,
+        StorageType storageType) {
       super(conf, usage, storageType);
     }
 

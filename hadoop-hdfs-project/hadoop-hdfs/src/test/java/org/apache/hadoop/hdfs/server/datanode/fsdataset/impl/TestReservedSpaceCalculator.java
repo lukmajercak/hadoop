@@ -28,10 +28,10 @@ import org.mockito.Mockito;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY;
-import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.Type.ABSOLUTE;
-import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.Type.AGGRESSIVE;
-import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.Type.CONSERVATIVE;
-import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.Type.PERCENTAGE;
+import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAbsolute;
+import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAggressive;
+import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorConservative;
+import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorPercentage;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
@@ -49,7 +49,9 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpaceAbsolute() {
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, ABSOLUTE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorAbsolute.class,
+        ReservedSpaceCalculator.class);
 
     // Test both using global configuration
     conf.setLong(DFS_DATANODE_DU_RESERVED_KEY, 900);
@@ -61,7 +63,9 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpaceAbsolutePerStorageType() {
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, ABSOLUTE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorAbsolute.class,
+        ReservedSpaceCalculator.class);
 
     // Test DISK
     conf.setLong(DFS_DATANODE_DU_RESERVED_KEY + ".disk", 500);
@@ -74,7 +78,9 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpacePercentage() {
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, PERCENTAGE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorPercentage.class,
+        ReservedSpaceCalculator.class);
 
     // Test both using global configuration
     conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY, 10);
@@ -90,7 +96,9 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpacePercentagePerStorageType() {
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, PERCENTAGE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorPercentage.class,
+        ReservedSpaceCalculator.class);
 
     // Test DISK
     conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY + ".disk", 20);
@@ -104,7 +112,9 @@ public class TestReservedSpaceCalculator {
   @Test
   public void testReservedSpaceConservativePerStorageType() {
     // This policy should take the maximum of the two
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, CONSERVATIVE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorConservative.class,
+        ReservedSpaceCalculator.class);
 
     // Test DISK + taking the reserved bytes over percentage,
     // as that gives more reserved space
@@ -122,7 +132,9 @@ public class TestReservedSpaceCalculator {
   @Test
   public void testReservedSpaceAggresivePerStorageType() {
     // This policy should take the maximum of the two
-    conf.setEnum(DFS_DATANODE_DU_RESERVED_TYPE_KEY, AGGRESSIVE);
+    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+        ReservedSpaceCalculatorAggressive.class,
+        ReservedSpaceCalculator.class);
 
     // Test RAM_DISK + taking the reserved bytes over percentage,
     // as that gives less reserved space
