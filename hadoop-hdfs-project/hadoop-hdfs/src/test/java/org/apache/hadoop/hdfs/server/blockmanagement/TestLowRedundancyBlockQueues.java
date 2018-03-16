@@ -92,11 +92,11 @@ public class TestLowRedundancyBlockQueues {
   public void testBlockPriorities() throws Throwable {
     LowRedundancyBlocks queues = new LowRedundancyBlocks();
     BlockInfo block1 = genBlockInfo(1);
-    BlockInfo block_very_low_redundancy_repl_two = genBlockInfo(2);
-    BlockInfo block_very_low_redundancy_repl_half = genBlockInfo(3);
-    BlockInfo block_very_low_redundancy = genBlockInfo(4);
-    BlockInfo block_corrupt = genBlockInfo(5);
-    BlockInfo block_corrupt_repl_one = genBlockInfo(6);
+    BlockInfo blockVeryLowRedundancyReplTwo = genBlockInfo(2);
+    BlockInfo blockVeryLowRedundancyReplHalf = genBlockInfo(3);
+    BlockInfo blockVeryLowRedundancy = genBlockInfo(4);
+    BlockInfo blockCorrupt = genBlockInfo(5);
+    BlockInfo blockCorruptReplOne = genBlockInfo(6);
 
     // Add a block with a single entry
     assertAdded(queues, block1, 1, 0, 3);
@@ -108,42 +108,42 @@ public class TestLowRedundancyBlockQueues {
     verifyBlockStats(queues, 1, 0, 0, 0, 0);
 
     // Add a second block with two replicas
-    assertAdded(queues, block_very_low_redundancy_repl_two, 2, 0, 3);
-    assertInLevel(queues, block_very_low_redundancy_repl_two,
+    assertAdded(queues, blockVeryLowRedundancyReplTwo, 2, 0, 3);
+    assertInLevel(queues, blockVeryLowRedundancyReplTwo,
         LowRedundancyBlocks.QUEUE_VERY_LOW_REDUNDANCY);
     verifyBlockStats(queues, 2, 0, 0, 0, 0);
 
     // Now try to add a block that is corrupt
-    assertAdded(queues, block_corrupt, 0, 0, 3);
-    assertInLevel(queues, block_corrupt,
+    assertAdded(queues, blockCorrupt, 0, 0, 3);
+    assertInLevel(queues, blockCorrupt,
                   LowRedundancyBlocks.QUEUE_WITH_CORRUPT_BLOCKS);
     verifyBlockStats(queues, 2, 1, 0, 0, 0);
 
     // Insert a very insufficiently redundancy block
-    assertAdded(queues, block_very_low_redundancy, 4, 0, 25);
-    assertInLevel(queues, block_very_low_redundancy,
+    assertAdded(queues, blockVeryLowRedundancy, 4, 0, 25);
+    assertInLevel(queues, blockVeryLowRedundancy,
                   LowRedundancyBlocks.QUEUE_VERY_LOW_REDUNDANCY);
     verifyBlockStats(queues, 3, 1, 0, 0, 0);
 
     //add a very under-replicated block with half of expected replicas
-    assertAdded(queues, block_very_low_redundancy_repl_half, 3, 0, 6);
+    assertAdded(queues, blockVeryLowRedundancyReplHalf, 3, 0, 6);
     assertEquals(4, queues.getLowRedundancyBlockCount());
     assertEquals(5, queues.size());
-    assertInLevel(queues, block_very_low_redundancy_repl_half,
+    assertInLevel(queues, blockVeryLowRedundancyReplHalf,
         LowRedundancyBlocks.QUEUE_VERY_LOW_REDUNDANCY);
 
     // Insert a corrupt block with replication factor 1
-    assertAdded(queues, block_corrupt_repl_one, 0, 0, 1);
+    assertAdded(queues, blockCorruptReplOne, 0, 0, 1);
     verifyBlockStats(queues, 4, 2, 1, 0, 0);
 
     // Bump up the expected count for corrupt replica one block from 1 to 3
-    queues.update(block_corrupt_repl_one, 0, 0, 0, 3, 0, 2);
+    queues.update(blockCorruptReplOne, 0, 0, 0, 3, 0, 2);
     verifyBlockStats(queues, 4, 2, 0, 0, 0);
 
     // Reduce the expected replicas to 1
-    queues.update(block_corrupt, 0, 0, 0, 1, 0, -2);
+    queues.update(blockCorrupt, 0, 0, 0, 1, 0, -2);
     verifyBlockStats(queues, 4, 2, 1, 0, 0);
-    queues.update(block_very_low_redundancy, 0, 0, 0, 1, -4, -24);
+    queues.update(blockVeryLowRedundancy, 0, 0, 0, 1, -4, -24);
     verifyBlockStats(queues, 3, 3, 2, 0, 0);
   }
 
