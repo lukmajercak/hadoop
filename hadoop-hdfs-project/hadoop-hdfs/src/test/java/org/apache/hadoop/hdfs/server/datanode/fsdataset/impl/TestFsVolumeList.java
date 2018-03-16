@@ -236,7 +236,9 @@ public class TestFsVolumeList {
   public void testDfsReservedPercentageForDifferentStorageTypes()
       throws IOException {
     Configuration conf = new Configuration();
-    conf.set(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY, "PERCENTAGE");
+    conf.setClass(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
+        ReservedSpaceCalculator.ReservedSpaceCalculatorPercentage.class,
+        ReservedSpaceCalculator.class);
     conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY, 15);
 
     File volDir = new File(baseDir, "volume-0");

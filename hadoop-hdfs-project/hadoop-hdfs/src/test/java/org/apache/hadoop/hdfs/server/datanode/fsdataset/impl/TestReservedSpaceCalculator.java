@@ -27,7 +27,7 @@ import org.mockito.Mockito;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY;
 import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAbsolute;
 import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAggressive;
 import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorConservative;
@@ -49,7 +49,7 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpaceAbsolute() {
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorAbsolute.class,
         ReservedSpaceCalculator.class);
 
@@ -63,7 +63,7 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpaceAbsolutePerStorageType() {
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorAbsolute.class,
         ReservedSpaceCalculator.class);
 
@@ -78,7 +78,7 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpacePercentage() {
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorPercentage.class,
         ReservedSpaceCalculator.class);
 
@@ -96,7 +96,7 @@ public class TestReservedSpaceCalculator {
 
   @Test
   public void testReservedSpacePercentagePerStorageType() {
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorPercentage.class,
         ReservedSpaceCalculator.class);
 
@@ -112,7 +112,7 @@ public class TestReservedSpaceCalculator {
   @Test
   public void testReservedSpaceConservativePerStorageType() {
     // This policy should take the maximum of the two
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorConservative.class,
         ReservedSpaceCalculator.class);
 
@@ -132,7 +132,7 @@ public class TestReservedSpaceCalculator {
   @Test
   public void testReservedSpaceAggresivePerStorageType() {
     // This policy should take the maximum of the two
-    conf.setClass(DFS_DATANODE_DU_RESERVED_TYPE_KEY,
+    conf.setClass(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculatorAggressive.class,
         ReservedSpaceCalculator.class);
 
@@ -155,7 +155,7 @@ public class TestReservedSpaceCalculator {
    */
   @Test
   public void testFallbackToAbsolute() {
-    conf.set(DFS_DATANODE_DU_RESERVED_TYPE_KEY, "INVALIDTYPE");
+    conf.set(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY, "INVALIDTYPE");
 
     conf.setLong(DFS_DATANODE_DU_RESERVED_KEY, 900);
     conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY, 20);

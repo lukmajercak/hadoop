@@ -28,8 +28,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFA
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_TYPE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALCULATOR_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY;
 
 /**
  * Used for calculating file system space reserved for non-HDFS data.
@@ -60,8 +60,8 @@ public abstract class ReservedSpaceCalculator {
     ReservedSpaceCalculator build() {
       try {
         Class<? extends ReservedSpaceCalculator> clazz = conf.getClass(
-            DFS_DATANODE_DU_RESERVED_TYPE_KEY,
-            DFS_DATANODE_DU_RESERVED_TYPE_DEFAULT,
+            DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
+            DFS_DATANODE_DU_RESERVED_CALCULATOR_DEFAULT,
             ReservedSpaceCalculator.class);
 
         Constructor constructor = clazz.getConstructor(

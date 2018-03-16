@@ -327,10 +327,10 @@
 </property>
 
 <property>
-  <name>dfs.datanode.du.reserved.type</name>
-  <value>absolute</value>
-  <description>Determines how reserved space for non-HDFS use is calculated. The supported options
-    are "ABSOLUTE", "PERCENTAGE", "CONSERVATIVE", "AGGRESSIVE".
+  <name>dfs.datanode.du.reserved.calculator</name>
+  <value>org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAbsolute</value>
+  <description>Determines the class of ReservedSpaceCalculator to be used for calculating disk space
+    reservedfor non-HDFS data. The basic calculators are Absolute, Percentage, Conservative and Aggressive.
   </description>
 </property>
 
