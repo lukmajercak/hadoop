@@ -52,7 +52,7 @@ import static org.mockito.Mockito.when;
 
 public class TestFsVolumeList {
 
-  private final Configuration conf = new Configuration();
+  private Configuration conf;
   private VolumeChoosingPolicy<FsVolumeImpl> blockChooser =
       new RoundRobinVolumeChoosingPolicy<>();
   private FsDatasetImpl dataset = null;
@@ -67,6 +67,7 @@ public class TestFsVolumeList {
     blockScannerConf.setInt(DFSConfigKeys.
         DFS_DATANODE_SCAN_PERIOD_HOURS_KEY, -1);
     blockScanner = new BlockScanner(null, blockScannerConf);
+    conf = new Configuration();
   }
 
   @Test(timeout=30000)
@@ -235,7 +236,6 @@ public class TestFsVolumeList {
   @Test
   public void testDfsReservedPercentageForDifferentStorageTypes()
       throws IOException {
-    Configuration conf = new Configuration();
     conf.setClass(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY,
         ReservedSpaceCalculator.ReservedSpaceCalculatorPercentage.class,
         ReservedSpaceCalculator.class);

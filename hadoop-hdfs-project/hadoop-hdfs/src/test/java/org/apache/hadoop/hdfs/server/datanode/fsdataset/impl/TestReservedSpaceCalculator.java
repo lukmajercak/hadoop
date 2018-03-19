@@ -35,6 +35,9 @@ import static org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpac
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
+/**
+ * Unit testing for different types of ReservedSpace calculators.
+ */
 public class TestReservedSpaceCalculator {
 
   private Configuration conf;

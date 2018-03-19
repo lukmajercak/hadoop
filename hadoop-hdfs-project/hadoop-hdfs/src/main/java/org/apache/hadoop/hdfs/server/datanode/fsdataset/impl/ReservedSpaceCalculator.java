@@ -36,11 +36,14 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DU_RESERVED_CALC
  */
 public abstract class ReservedSpaceCalculator {
 
+  /**
+   * Used for creating instances of ReservedSpaceCalculator.
+   */
   public static class ReservedSpaceCalculatorBuilder {
 
     private final Configuration conf;
     private DF usage;
-    protected StorageType storageType;
+    private StorageType storageType;
 
     public ReservedSpaceCalculatorBuilder(Configuration conf) {
       this.conf = conf;
@@ -77,15 +80,19 @@ public abstract class ReservedSpaceCalculator {
     }
   }
 
-  protected final DF usage;
-  protected final Configuration conf;
-  protected final StorageType storageType;
+  private final DF usage;
+  private final Configuration conf;
+  private final StorageType storageType;
 
   ReservedSpaceCalculator(Configuration conf, DF usage,
       StorageType storageType) {
     this.usage = usage;
     this.conf = conf;
     this.storageType = storageType;
+  }
+
+  DF getUsage() {
+    return usage;
   }
 
   long getReservedFromConf(String key, long defaultValue) {
@@ -140,7 +147,7 @@ public abstract class ReservedSpaceCalculator {
 
     @Override
     long getReserved() {
-      return getPercentage(usage.getCapacity(), reservedPct);
+      return getPercentage(getUsage().getCapacity(), reservedPct);
     }
   }
 
@@ -151,8 +158,8 @@ public abstract class ReservedSpaceCalculator {
   public static class ReservedSpaceCalculatorConservative extends
       ReservedSpaceCalculator {
 
-    final long reservedBytes;
-    final long reservedPct;
+    private final long reservedBytes;
+    private final long reservedPct;
 
     public ReservedSpaceCalculatorConservative(Configuration conf, DF usage,
         StorageType storageType) {
@@ -164,10 +171,18 @@ public abstract class ReservedSpaceCalculator {
           DFS_DATANODE_DU_RESERVED_PERCENTAGE_DEFAULT);
     }
 
+    long getReservedBytes() {
+      return reservedBytes;
+    }
+
+    long getReservedPct() {
+      return reservedPct;
+    }
+
     @Override
     long getReserved() {
       return Math.max(reservedBytes,
-          getPercentage(usage.getCapacity(), reservedPct));
+          getPercentage(getUsage().getCapacity(), reservedPct));
     }
   }
 
@@ -185,8 +200,8 @@ public abstract class ReservedSpaceCalculator {
 
     @Override
     long getReserved() {
-      return Math.min(reservedBytes,
-          getPercentage(usage.getCapacity(), reservedPct));
+      return Math.min(getReservedBytes(),
+          getPercentage(getUsage().getCapacity(), getReservedPct()));
     }
   }
 
