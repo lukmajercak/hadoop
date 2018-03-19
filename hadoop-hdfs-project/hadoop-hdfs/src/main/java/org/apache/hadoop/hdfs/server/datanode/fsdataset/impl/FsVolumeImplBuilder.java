@@ -72,8 +72,8 @@ public class FsVolumeImplBuilder {
   }
 
   @VisibleForTesting
-  FsVolumeImplBuilder setUsage(DF usg) {
-    this.usage = usg;
+  FsVolumeImplBuilder setUsage(DF newUsage) {
+    this.usage = newUsage;
     return this;
   }
 

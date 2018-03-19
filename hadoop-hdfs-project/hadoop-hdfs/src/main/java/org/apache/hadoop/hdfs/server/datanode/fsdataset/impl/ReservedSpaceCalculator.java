@@ -49,14 +49,14 @@ public abstract class ReservedSpaceCalculator {
       this.conf = conf;
     }
 
-    public ReservedSpaceCalculatorBuilder setUsage(DF usage) {
-      this.usage = usage;
+    public ReservedSpaceCalculatorBuilder setUsage(DF newUsage) {
+      this.usage = newUsage;
       return this;
     }
 
     public ReservedSpaceCalculatorBuilder setStorageType(
-        StorageType storageType) {
-      this.storageType = storageType;
+        StorageType newStorageType) {
+      this.storageType = newStorageType;
       return this;
     }
 
