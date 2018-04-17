@@ -109,6 +109,14 @@ public class JournalNodeHttpServer {
       }
     }
   }
+
+  /**
+   * Return the actual HTTP/HTTPS address bound to by the running server.
+   */
+  public InetSocketAddress getAddress() {
+    assert httpAddress != null || httpsAddress != null;
+    return httpAddress != null ? httpAddress : httpsAddress;
+  }
   
   /**
    * Return the actual address bound to by the running server.

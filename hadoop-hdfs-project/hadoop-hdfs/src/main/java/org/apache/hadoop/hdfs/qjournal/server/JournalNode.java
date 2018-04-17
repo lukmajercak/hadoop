@@ -491,6 +491,14 @@ public class JournalNode implements Tool, Configurable, JournalNodeMXBean {
     return rpcServer;
   }
 
+
+  /**
+   * @return the actual JournalNode HTTP/HTTPS address.
+   */
+  public InetSocketAddress getBoundHttpAddress() {
+    return httpServer.getAddress();
+  }
+
   /**
    * @return JournalNode HTTP address
    */

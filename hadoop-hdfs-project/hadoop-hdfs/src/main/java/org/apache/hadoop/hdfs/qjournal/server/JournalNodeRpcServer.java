@@ -159,7 +159,7 @@ public class JournalNodeRpcServer implements QJournalProtocol,
         nameServiceId).getLastPromisedEpoch();
     return GetJournalStateResponseProto.newBuilder()
         .setLastPromisedEpoch(epoch)
-        .setHttpPort(jn.getHttpAddress().getPort())
+        .setHttpPort(jn.getBoundHttpAddress().getPort())
         .setFromURL(jn.getHttpServerURI())
         .build();
   }
@@ -228,7 +228,7 @@ public class JournalNodeRpcServer implements QJournalProtocol,
     
     return GetEditLogManifestResponseProto.newBuilder()
         .setManifest(PBHelper.convert(manifest))
-        .setHttpPort(jn.getHttpAddress().getPort())
+        .setHttpPort(jn.getBoundHttpAddress().getPort())
         .setFromURL(jn.getHttpServerURI())
         .build();
   }
@@ -304,7 +304,7 @@ public class JournalNodeRpcServer implements QJournalProtocol,
 
     return GetEditLogManifestResponseProto.newBuilder()
         .setManifest(PBHelper.convert(manifest))
-        .setHttpPort(jn.getHttpAddress().getPort())
+        .setHttpPort(jn.getBoundHttpAddress().getPort())
         .setFromURL(jn.getHttpServerURI())
         .build();
   }
