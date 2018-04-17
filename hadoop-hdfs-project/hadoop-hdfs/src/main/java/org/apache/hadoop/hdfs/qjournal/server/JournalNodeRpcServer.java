@@ -309,7 +309,7 @@ public class JournalNodeRpcServer implements QJournalProtocol,
         .build();
   }
 
-  /** Allow access to the RPC server for testing */
+  /** Allow access to the RPC server for testing. */
   @VisibleForTesting
   Server getRpcServer() {
     return server;

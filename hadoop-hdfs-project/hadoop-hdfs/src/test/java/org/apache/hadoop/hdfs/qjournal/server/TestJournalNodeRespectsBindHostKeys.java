@@ -49,7 +49,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 
 /**
- * This test checks that the JournalNode respects the following keys:
+ * This test checks that the JournalNode respects the following keys.
  *
  *  - DFS_JOURNALNODE_RPC_BIND_HOST_KEY
  *  - DFS_JOURNALNODE_HTTP_BIND_HOST_KEY
@@ -57,7 +57,8 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
  */
 public class TestJournalNodeRespectsBindHostKeys {
 
-  public static final Log LOG = LogFactory.getLog(TestJournalNodeRespectsBindHostKeys.class);
+  public static final Log LOG = LogFactory.getLog(
+      TestJournalNodeRespectsBindHostKeys.class);
   private static final String WILDCARD_ADDRESS = "0.0.0.0";
   private static final String LOCALHOST_SERVER_ADDRESS = "127.0.0.1:0";
   private static final int NUM_JN = 1;
@@ -81,7 +82,8 @@ public class TestJournalNodeRespectsBindHostKeys {
 
   private static String getRpcServerAddress(JournalNode jn) {
     JournalNodeRpcServer rpcServer = jn.getRpcServer();
-    return rpcServer.getRpcServer().getListenerAddress().getAddress().toString();
+    return rpcServer.getRpcServer().getListenerAddress().getAddress().
+        toString();
   }
 
   @Test (timeout=300000)
@@ -139,7 +141,8 @@ public class TestJournalNodeRespectsBindHostKeys {
   }
 
   private static final String BASEDIR = System.getProperty("test.build.dir",
-      "target/test-dir") + "/" + TestJournalNodeRespectsBindHostKeys.class.getSimpleName();
+      "target/test-dir") + "/" +
+      TestJournalNodeRespectsBindHostKeys.class.getSimpleName();
 
   private static void setupSsl() throws Exception {
     Configuration conf = new Configuration();

@@ -471,12 +471,14 @@ public class JournalNode implements Tool, Configurable, JournalNodeMXBean {
         DFSConfigKeys.DFS_JOURNALNODE_HTTP_ADDRESS_KEY);
   }
 
-  protected InetSocketAddress getHttpServerBindAddress(Configuration conf) {
-    InetSocketAddress bindAddress = getHttpAddress(conf);
+  protected InetSocketAddress getHttpServerBindAddress(
+      Configuration configuration) {
+    InetSocketAddress bindAddress = getHttpAddress(configuration);
 
     // If DFS_JOURNALNODE_HTTP_BIND_HOST_KEY exists then it overrides the
     // host name portion of DFS_JOURNALNODE_HTTP_ADDRESS_KEY.
-    final String bindHost = conf.getTrimmed(DFS_JOURNALNODE_HTTP_BIND_HOST_KEY);
+    final String bindHost = configuration.getTrimmed(
+        DFS_JOURNALNODE_HTTP_BIND_HOST_KEY);
     if (bindHost != null && !bindHost.isEmpty()) {
       bindAddress = new InetSocketAddress(bindHost, bindAddress.getPort());
     }
