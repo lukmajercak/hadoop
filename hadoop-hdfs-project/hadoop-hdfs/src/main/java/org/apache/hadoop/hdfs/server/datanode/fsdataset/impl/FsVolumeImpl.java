@@ -162,11 +162,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
     this.currentDir = sd.getCurrentDir();
     this.storageType = storageLocation.getStorageType();
     this.configuredCapacity = -1;
-    if (currentDir != null && usage == null) {
-      this.usage = new DF(currentDir.getParentFile(), conf);
-    } else {
-      this.usage = usage;
-    }
+    this.usage = usage;
     if (currentDir != null) {
       File parent = currentDir.getParentFile();
       cacheExecutor = initializeCacheExecutor(parent);

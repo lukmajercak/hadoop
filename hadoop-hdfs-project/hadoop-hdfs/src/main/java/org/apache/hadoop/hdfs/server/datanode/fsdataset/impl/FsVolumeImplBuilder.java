@@ -83,6 +83,10 @@ public class FsVolumeImplBuilder {
           fileIoProvider != null ? fileIoProvider :
             new FileIoProvider(null, null), conf);
     }
+    if (null == usage) {
+      // set usage unless overridden by unit tests
+      usage = new DF(sd.getCurrentDir().getParentFile(), conf);
+    }
     return new FsVolumeImpl(
         dataset, storageID, sd,
         fileIoProvider != null ? fileIoProvider :
