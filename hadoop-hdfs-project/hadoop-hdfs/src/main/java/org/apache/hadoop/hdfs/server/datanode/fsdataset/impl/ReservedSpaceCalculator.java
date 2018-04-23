@@ -39,22 +39,23 @@ public abstract class ReservedSpaceCalculator {
   /**
    * Used for creating instances of ReservedSpaceCalculator.
    */
-  public static class ReservedSpaceCalculatorBuilder {
+  public static class Builder {
 
     private final Configuration conf;
+
     private DF usage;
     private StorageType storageType;
 
-    public ReservedSpaceCalculatorBuilder(Configuration conf) {
+    public Builder(Configuration conf) {
       this.conf = conf;
     }
 
-    public ReservedSpaceCalculatorBuilder setUsage(DF newUsage) {
+    public Builder setUsage(DF newUsage) {
       this.usage = newUsage;
       return this;
     }
 
-    public ReservedSpaceCalculatorBuilder setStorageType(
+    public Builder setStorageType(
         StorageType newStorageType) {
       this.storageType = newStorageType;
       return this;
@@ -73,10 +74,9 @@ public abstract class ReservedSpaceCalculator {
         return (ReservedSpaceCalculator) constructor.newInstance(
             conf, usage, storageType);
       } catch (Exception e) {
-        FsVolumeImpl.LOG.warn("Exception when instantiating " +
-            "ReservedSpaceCalculator, switching to Absolute.", e);
+        throw new IllegalStateException(
+            "Error instantiating ReservedSpaceCalculator", e);
       }
-      return new ReservedSpaceCalculatorAbsolute(conf, usage, storageType);
     }
   }
 
@@ -181,8 +181,8 @@ public abstract class ReservedSpaceCalculator {
 
     @Override
     long getReserved() {
-      return Math.max(reservedBytes,
-          getPercentage(getUsage().getCapacity(), reservedPct));
+      return Math.max(getReservedBytes(),
+          getPercentage(getUsage().getCapacity(), getReservedPct()));
     }
   }
 
@@ -191,11 +191,27 @@ public abstract class ReservedSpaceCalculator {
    * picks the one that will yield less reserved space.
    */
   public static class ReservedSpaceCalculatorAggressive extends
-      ReservedSpaceCalculatorConservative {
+      ReservedSpaceCalculator {
+
+    private final long reservedBytes;
+    private final long reservedPct;
 
     public ReservedSpaceCalculatorAggressive(Configuration conf, DF usage,
         StorageType storageType) {
       super(conf, usage, storageType);
+      this.reservedBytes = getReservedFromConf(DFS_DATANODE_DU_RESERVED_KEY,
+          DFS_DATANODE_DU_RESERVED_DEFAULT);
+      this.reservedPct = getReservedFromConf(
+          DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY,
+          DFS_DATANODE_DU_RESERVED_PERCENTAGE_DEFAULT);
+    }
+
+    long getReservedBytes() {
+      return reservedBytes;
+    }
+
+    long getReservedPct() {
+      return reservedPct;
     }
 
     @Override

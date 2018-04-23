@@ -328,9 +328,15 @@
 
 <property>
   <name>dfs.datanode.du.reserved.calculator</name>
-  <value>org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorAbsolute</value>
-  <description>Determines the class of ReservedSpaceCalculator to be used for calculating disk space
-    reservedfor non-HDFS data. The basic calculators are Absolute, Percentage, Conservative and Aggressive.
+  <value>org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator$ReservedSpaceCalculatorAbsolute</value>
+  <description>Determines the class of ReservedSpaceCalculator to be used for
+    calculating disk space reservedfor non-HDFS data. The default calculator is
+    ReservedSpaceCalculatorAbsolute which will use dfs.datanode.du.reserved
+    for a static reserved number of bytes. ReservedSpaceCalculatorPercentage
+    will use dfs.datanode.du.reserved.pct to calculate the reserved number
+    of bytes based on the size of the storage. ReservedSpaceCalculatorConservative and
+    ReservedSpaceCalculatorAggressive will use their combination, Conservative will use
+    maximum, Aggressive minimum. For more details see ReservedSpaceCalculator.
   </description>
 </property>
 
@@ -349,8 +355,9 @@
 <property>
   <name>dfs.datanode.du.reserved.pct</name>
   <value>0</value>
-  <description>Reserved space in percentage. The actual number of bytes reserved will be calculated
-    by using the total capacity of the data directory in question. Specific storage type based reservation
+  <description>Reserved space in percentage. Read dfs.datanode.du.reserved.calculator to see
+    when this takes effect. The actual number of bytes reserved will be calculated by using the
+    total capacity of the data directory in question. Specific storage type based reservation
     is also supported. The property can be followed with corresponding storage types
     ([ssd]/[disk]/[archive]/[ram_disk]) for cluster with heterogeneous storage.
     For example, reserved percentage space for RAM_DISK storage can be configured using property

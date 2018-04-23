@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.DF;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator.ReservedSpaceCalculatorBuilder;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -152,27 +151,17 @@ public class TestReservedSpaceCalculator {
     checkReserved(StorageType.ARCHIVE, 100000, 5000);
   }
 
-  /**
-   * Test that specifying invalid type will result in falling back
-   * to using absolute reserved space calculation.
-   */
-  @Test
-  public void testFallbackToAbsolute() {
+  @Test(expected = IllegalStateException.class)
+  public void testIllegalCalculator() {
     conf.set(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY, "INVALIDTYPE");
-
-    conf.setLong(DFS_DATANODE_DU_RESERVED_KEY, 900);
-    conf.setLong(DFS_DATANODE_DU_RESERVED_PERCENTAGE_KEY, 20);
-
     checkReserved(StorageType.DISK, 3000, 900);
-    checkReserved(StorageType.SSD, 2500, 900);
-    checkReserved(StorageType.ARCHIVE, 7000, 900);
   }
 
   private void checkReserved(StorageType storageType,
       long totalCapacity, long reservedExpected) {
     when(usage.getCapacity()).thenReturn(totalCapacity);
 
-    reserved = new ReservedSpaceCalculatorBuilder(conf).setUsage(usage)
+    reserved = new ReservedSpaceCalculator.Builder(conf).setUsage(usage)
         .setStorageType(storageType).build();
     assertEquals(reservedExpected, reserved.getReserved());
   }
