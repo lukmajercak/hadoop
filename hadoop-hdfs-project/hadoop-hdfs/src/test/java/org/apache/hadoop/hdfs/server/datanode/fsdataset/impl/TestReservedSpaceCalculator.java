@@ -154,7 +154,10 @@ public class TestReservedSpaceCalculator {
   @Test(expected = IllegalStateException.class)
   public void testInvalidCalculator() {
     conf.set(DFS_DATANODE_DU_RESERVED_CALCULATOR_KEY, "INVALIDTYPE");
-    checkReserved(StorageType.DISK, 3000, 900);
+    reserved = new ReservedSpaceCalculator.Builder(conf)
+        .setUsage(usage)
+        .setStorageType(StorageType.DISK)
+        .build();
   }
 
   private void checkReserved(StorageType storageType,
