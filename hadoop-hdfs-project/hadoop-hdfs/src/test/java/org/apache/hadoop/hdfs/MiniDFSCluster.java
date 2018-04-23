@@ -202,8 +202,28 @@ public class MiniDFSCluster implements AutoCloseable {
       this.conf = conf;
       this.storagesPerDatanode =
           FsDatasetTestUtils.Factory.getFactory(conf).getDefaultNumOfDataDirs();
+      if (null == conf.get(HDFS_MINIDFS_BASEDIR)) {
+        conf.set(HDFS_MINIDFS_BASEDIR,
+            new File(getBaseDirectory()).getAbsolutePath());
+      }
     }
-    
+
+    public Builder(Configuration conf, File basedir) {
+      this.conf = conf;
+      this.storagesPerDatanode =
+          FsDatasetTestUtils.Factory.getFactory(conf).getDefaultNumOfDataDirs();
+      if (null == basedir) {
+        throw new IllegalArgumentException(
+            "MiniDFSCluster base directory cannot be null");
+      }
+      String cdir = conf.get(HDFS_MINIDFS_BASEDIR);
+      if (cdir != null) {
+        throw new IllegalArgumentException(
+            "MiniDFSCluster base directory already defined (" + cdir + ")");
+      }
+      conf.set(HDFS_MINIDFS_BASEDIR, basedir.getAbsolutePath());
+    }
+
     /**
      * Default: 0
      */
@@ -2276,6 +2296,22 @@ public class MiniDFSCluster implements AutoCloseable {
     }
     return stopDataNode(node);
   }
+
+  /*
+   * Restart a DataNode by name.
+   * @return true if DataNode restart is successful else returns false
+   */
+  public synchronized boolean restartDataNode(String dnName)
+      throws IOException {
+    for (int i = 0; i < dataNodes.size(); i++) {
+      DataNode dn = dataNodes.get(i).datanode;
+      if (dnName.equals(dn.getDatanodeId().getXferAddr())) {
+        return restartDataNode(i);
+      }
+    }
+    return false;
+  }
+
 
   /*
    * Shutdown a particular datanode

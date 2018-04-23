@@ -79,6 +79,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsEntryList;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.RMQueueAclInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationDeleteRequestInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationSubmissionRequestInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationUpdateRequestInfo;
@@ -986,6 +987,52 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
     return metrics;
   }
 
+  /**
+   * The YARN Router will forward to the respective YARN RM in which the AM is
+   * running.
+   * <p>
+   * Possible failure:
+   * <p>
+   * Client: identical behavior as {@code RMWebServices}.
+   * <p>
+   * Router: the Client will timeout and resubmit the request.
+   * <p>
+   * ResourceManager: the Router will timeout and the call will fail.
+   * <p>
+   * State Store: the Router will timeout and it will retry depending on the
+   * FederationFacade settings - if the failure happened before the select
+   * operation.
+   */
+  @Override
+  public AppState getAppState(HttpServletRequest hsr, String appId)
+      throws AuthorizationException {
+
+    ApplicationId applicationId = null;
+    try {
+      applicationId = ApplicationId.fromString(appId);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+
+    SubClusterInfo subClusterInfo = null;
+    SubClusterId subClusterId = null;
+    try {
+      subClusterId =
+          federationFacade.getApplicationHomeSubCluster(applicationId);
+      if (subClusterId == null) {
+        return null;
+      }
+      subClusterInfo = federationFacade.getSubCluster(subClusterId);
+    } catch (YarnException e) {
+      return null;
+    }
+
+    DefaultRequestInterceptorREST interceptor =
+        getOrCreateInterceptorForSubCluster(subClusterId,
+            subClusterInfo.getRMWebServiceAddress());
+    return interceptor.getAppState(hsr, appId);
+  }
+
   @Override
   public ClusterInfo get() {
     return getClusterInfo();
@@ -1021,12 +1068,6 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
   @Override
   public ApplicationStatisticsInfo getAppStatistics(HttpServletRequest hsr,
       Set<String> stateQueries, Set<String> typeQueries) {
-    throw new NotImplementedException();
-  }
-
-  @Override
-  public AppState getAppState(HttpServletRequest hsr, String appId)
-      throws AuthorizationException {
     throw new NotImplementedException();
   }
 
@@ -1180,6 +1221,12 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
 
   @Override
   public AppAttemptsInfo getAppAttempts(HttpServletRequest hsr, String appId) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public RMQueueAclInfo checkUserAccessToQueue(String queue, String username,
+      String queueAclType, HttpServletRequest hsr) {
     throw new NotImplementedException();
   }
 

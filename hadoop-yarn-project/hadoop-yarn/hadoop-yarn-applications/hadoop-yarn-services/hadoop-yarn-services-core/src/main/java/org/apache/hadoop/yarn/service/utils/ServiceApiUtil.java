@@ -22,21 +22,23 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.registry.client.api.RegistryConstants;
 import org.apache.hadoop.registry.client.binding.RegistryUtils;
-import org.apache.hadoop.security.HadoopKerberosName;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.exceptions.YarnException;
-import org.apache.hadoop.yarn.service.api.records.Service;
 import org.apache.hadoop.yarn.service.api.records.Artifact;
 import org.apache.hadoop.yarn.service.api.records.Component;
 import org.apache.hadoop.yarn.service.api.records.Configuration;
+import org.apache.hadoop.yarn.service.api.records.PlacementConstraint;
 import org.apache.hadoop.yarn.service.api.records.Resource;
-import org.apache.hadoop.yarn.service.provider.AbstractClientProvider;
-import org.apache.hadoop.yarn.service.provider.ProviderFactory;
-import org.apache.hadoop.yarn.service.monitor.probe.MonitorUtils;
+import org.apache.hadoop.yarn.service.api.records.Service;
+import org.apache.hadoop.yarn.service.exceptions.SliderException;
 import org.apache.hadoop.yarn.service.conf.RestApiConstants;
 import org.apache.hadoop.yarn.service.exceptions.RestApiErrorMessages;
+import org.apache.hadoop.yarn.service.monitor.probe.MonitorUtils;
+import org.apache.hadoop.yarn.service.provider.AbstractClientProvider;
+import org.apache.hadoop.yarn.service.provider.ProviderFactory;
 import org.codehaus.jackson.map.PropertyNamingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +114,13 @@ public class ServiceApiUtil {
           throw new IllegalArgumentException(e);
         }
       }
+    }
+
+    // Validate the Docker client config.
+    try {
+      validateDockerClientConfiguration(service, conf);
+    } catch (IOException e) {
+      throw new IllegalArgumentException(e);
     }
 
     // Validate there are no component name collisions (collisions are not
@@ -201,6 +210,7 @@ public class ServiceApiUtil {
       }
       validateComponent(comp, fs.getFileSystem(), conf);
     }
+    validatePlacementPolicy(service.getComponents(), componentNames);
 
     // validate dependency tree
     sortByDependencies(service.getComponents());
@@ -208,6 +218,20 @@ public class ServiceApiUtil {
     // Service lifetime if not specified, is set to unlimited lifetime
     if (service.getLifetime() == null) {
       service.setLifetime(RestApiConstants.DEFAULT_UNLIMITED_LIFETIME);
+    }
+  }
+
+  private static void validateDockerClientConfiguration(Service service,
+      org.apache.hadoop.conf.Configuration conf) throws IOException {
+    String dockerClientConfig = service.getDockerClientConfig();
+    if (!StringUtils.isEmpty(dockerClientConfig)) {
+      Path dockerClientConfigPath = new Path(dockerClientConfig);
+      FileSystem fs = dockerClientConfigPath.getFileSystem(conf);
+      if (!fs.exists(dockerClientConfigPath)) {
+        throw new IOException(
+            "The supplied Docker client config does not exist: "
+                + dockerClientConfig);
+      }
     }
   }
 
@@ -262,6 +286,24 @@ public class ServiceApiUtil {
     namePattern.validate(name);
   }
 
+  private static void validatePlacementPolicy(List<Component> components,
+      Set<String> componentNames) {
+    for (Component comp : components) {
+      if (comp.getPlacementPolicy() != null) {
+        for (PlacementConstraint constraint : comp.getPlacementPolicy()
+            .getConstraints()) {
+          for (String targetTag : constraint.getTargetTags()) {
+            if (!comp.getName().equals(targetTag)) {
+              throw new IllegalArgumentException(String.format(
+                  RestApiErrorMessages.ERROR_PLACEMENT_POLICY_TAG_NAME_NOT_SAME,
+                  targetTag, comp.getName(), comp.getName(), comp.getName()));
+            }
+          }
+        }
+      }
+    }
+  }
+
   @VisibleForTesting
   public static List<Component> getComponents(SliderFileSystem
       fs, String serviceName) throws IOException {
@@ -273,6 +315,14 @@ public class ServiceApiUtil {
     Path serviceJson = getServiceJsonPath(fs, serviceName);
     LOG.info("Loading service definition from " + serviceJson);
     return jsonSerDeser.load(fs.getFileSystem(), serviceJson);
+  }
+
+  public static Service loadServiceUpgrade(SliderFileSystem fs,
+      String serviceName, String version) throws IOException {
+    Path versionPath = fs.buildClusterUpgradeDirPath(serviceName, version);
+    Path versionedDef = new Path(versionPath, serviceName + ".json");
+    LOG.info("Loading service definition from {}", versionedDef);
+    return jsonSerDeser.load(fs.getFileSystem(), versionedDef);
   }
 
   public static Service loadServiceFrom(SliderFileSystem fs,
@@ -427,6 +477,23 @@ public class ServiceApiUtil {
       return sortedComponents;
     }
     return sortByDependencies(components, sortedComponents);
+  }
+
+  public static void createDirAndPersistApp(SliderFileSystem fs, Path appDir,
+      Service service)
+      throws IOException, SliderException {
+    FsPermission appDirPermission = new FsPermission("750");
+    fs.createWithPermissions(appDir, appDirPermission);
+    Path appJson = writeAppDefinition(fs, appDir, service);
+    LOG.info("Persisted service {} version {} at {}", service.getName(),
+        service.getVersion(), appJson);
+  }
+
+  public static Path writeAppDefinition(SliderFileSystem fs, Path appDir,
+      Service service) throws IOException {
+    Path appJson = new Path(appDir, service.getName() + ".json");
+    jsonSerDeser.save(fs.getFileSystem(), appJson, service, true);
+    return appJson;
   }
 
   public static String $(String s) {
