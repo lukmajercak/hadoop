@@ -144,6 +144,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   FsVolumeImpl(FsDatasetImpl dataset, String storageID, StorageDirectory sd,
       FileIoProvider fileIoProvider, Configuration conf) throws IOException {
+    // outside tests, usage created in ReservedSpaceCalculator.Builder
     this(dataset, storageID, sd, fileIoProvider, conf, null);
   }
 
