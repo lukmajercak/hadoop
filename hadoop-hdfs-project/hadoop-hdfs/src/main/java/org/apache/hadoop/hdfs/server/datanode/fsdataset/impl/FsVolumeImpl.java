@@ -162,17 +162,15 @@ public class FsVolumeImpl implements FsVolumeSpi {
     this.storageLocation = sd.getStorageLocation();
     this.currentDir = sd.getCurrentDir();
     File parent = currentDir.getParentFile();
-    this.usage = new DF(parent, conf);
     this.storageType = storageLocation.getStorageType();
-    this.reserved = conf.getLong(DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY
-        + "." + StringUtils.toLowerCase(storageType.toString()), conf.getLong(
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_KEY,
-        DFSConfigKeys.DFS_DATANODE_DU_RESERVED_DEFAULT));
     this.configuredCapacity = -1;
+    this.usage = usage;
     this.conf = conf;
     this.fileIoProvider = fileIoProvider;
     cacheExecutor = initializeCacheExecutor(parent);
     this.metrics = DataNodeVolumeMetrics.create(conf, getBaseURI().getPath());
+    this.reserved = new ReservedSpaceCalculator.Builder(conf)
+        .setUsage(usage).setStorageType(storageType).build();
   }
 
   protected ThreadPoolExecutor initializeCacheExecutor(File parent) {

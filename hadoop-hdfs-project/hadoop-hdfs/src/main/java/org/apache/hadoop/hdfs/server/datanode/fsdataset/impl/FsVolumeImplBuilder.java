@@ -19,7 +19,9 @@ package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 
 import java.io.IOException;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.DF;
 import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
 import org.apache.hadoop.hdfs.server.datanode.FileIoProvider;
 
@@ -68,10 +70,21 @@ public class FsVolumeImplBuilder {
     return this;
   }
 
+  @VisibleForTesting
+  FsVolumeImplBuilder setUsage(DF newUsage) {
+    this.usage = newUsage;
+    return this;
+  }
+
   FsVolumeImpl build() throws IOException {
+    if (null == usage) {
+      // set usage unless overridden by unit tests
+      usage = new DF(sd.getCurrentDir().getParentFile(), conf);
+    }
+
     return new FsVolumeImpl(
         dataset, storageID, sd,
         fileIoProvider != null ? fileIoProvider :
-            new FileIoProvider(null, null), conf);
+            new FileIoProvider(null, null), conf, usage);
   }
 }
