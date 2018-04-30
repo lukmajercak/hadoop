@@ -33,12 +33,14 @@ public class FsVolumeImplBuilder {
   private StorageDirectory sd;
   private Configuration conf;
   private FileIoProvider fileIoProvider;
+  private DF usage;
 
   public FsVolumeImplBuilder() {
     dataset = null;
     storageID = null;
     sd = null;
     conf = null;
+    usage = null;
   }
 
   FsVolumeImplBuilder setDataset(FsDatasetImpl dataset) {
