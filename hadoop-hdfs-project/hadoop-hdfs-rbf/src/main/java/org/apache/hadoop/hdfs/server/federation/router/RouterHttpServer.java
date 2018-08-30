@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.common.JspHelper;
-import org.apache.hadoop.hdfs.server.namenode.IsNameNodeActiveServlet;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeHttpServer;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.service.AbstractService;
@@ -120,8 +119,8 @@ public class RouterHttpServer extends AbstractService {
       HttpServer2 httpServer, Configuration conf) {
     // TODO Add servlets for FSCK, etc
     httpServer.addInternalServlet(IsRouterActiveServlet.SERVLET_NAME,
-        IsNameNodeActiveServlet.PATH_SPEC,
-        IsNameNodeActiveServlet.class);
+        IsRouterActiveServlet.PATH_SPEC,
+        IsRouterActiveServlet.class);
   }
 
   public InetSocketAddress getHttpAddress() {
