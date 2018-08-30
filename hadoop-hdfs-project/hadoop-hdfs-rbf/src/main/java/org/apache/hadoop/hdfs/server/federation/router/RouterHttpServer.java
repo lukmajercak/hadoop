@@ -27,6 +27,8 @@ import org.apache.hadoop.hdfs.server.namenode.NameNodeHttpServer;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.service.AbstractService;
 
+import javax.servlet.ServletContext;
+
 /**
  * Web interface for the {@link Router}. It exposes the Web UI and the WebHDFS
  * methods from {@link RouterWebHdfsMethods}.
@@ -124,5 +126,9 @@ public class RouterHttpServer extends AbstractService {
 
   public InetSocketAddress getHttpsAddress() {
     return this.httpsAddress;
+  }
+
+  public static Router getRouterFromContext(ServletContext context) {
+    return (Router)context.getAttribute(NAMENODE_ATTRIBUTE_KEY);
   }
 }
