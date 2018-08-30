@@ -19,8 +19,9 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import org.apache.hadoop.http.IsActiveServlet;
 import org.apache.hadoop.ha.HAServiceProtocol;
+
 /**
- * Used by SLB in AP to find the active ResourceManager.
+ * Used by Load Balancers to find the active ResourceManager.
  */
 public class IsResourceManagerActiveServlet extends IsActiveServlet {
 
