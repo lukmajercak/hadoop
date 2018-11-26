@@ -237,14 +237,14 @@ public class LdapGroupsMapping
       LDAP_CONFIG_PREFIX + ".read.timeout.ms";
   public static final int READ_TIMEOUT_DEFAULT = 60 * 1000; // 60 seconds
 
-  public static final String LDAP_NUM_RETRIES_KEY =
-      LDAP_CONFIG_PREFIX + ".num.retries";
-  public static final int LDAP_NUM_RETRIES_DEFAULT = 3;
+  public static final String LDAP_NUM_ATTEMPTS_KEY =
+      LDAP_CONFIG_PREFIX + ".num.attempts";
+  public static final int LDAP_NUM_ATTEMPTS_DEFAULT = 3;
 
-  public static final String LDAP_NUM_RETRIES_BEFORE_FAILOVER_KEY =
-      LDAP_CONFIG_PREFIX + ".num.retries.before.failover";
-  public static final int LDAP_NUM_RETRIES_BEFORE_FAILOVER_DEFAULT =
-      LDAP_NUM_RETRIES_DEFAULT;
+  public static final String LDAP_NUM_ATTEMPTS_BEFORE_FAILOVER_KEY =
+      LDAP_CONFIG_PREFIX + ".num.attempts.before.failover";
+  public static final int LDAP_NUM_ATTEMPTS_BEFORE_FAILOVER_DEFAULT =
+      LDAP_NUM_ATTEMPTS_DEFAULT;
 
   public static final String LDAP_CTX_FACTORY_CLASS_KEY =
       LDAP_CONFIG_PREFIX + ".ctx.factory.class";
@@ -285,8 +285,8 @@ public class LdapGroupsMapping
   private String posixGidAttr;
   private boolean isPosix;
   private boolean useOneQuery;
-  private int numRetries;
-  private int numRetriesBeforeFailover;
+  private int numAttempts;
+  private int numAttemptsBeforeFailover;
   private Class<? extends InitialContextFactory> ldapCxtFactoryClass;
 
   /**
@@ -309,13 +309,13 @@ public class LdapGroupsMapping
      * DirContext/connection.
      */
 
-    int retry = 0;
+    int attempt = 0;
     int atemptsBeforeFailover = 0;
-    while (retry < numRetries) {
+    while (attempt < numAttempts) {
       try {
         return doGetGroups(user, groupHierarchyLevels);
       } catch (NamingException e) {
-        retry++;
+        attempt++;
         atemptsBeforeFailover++;
 
         if (failover(atemptsBeforeFailover)) {
@@ -323,7 +323,7 @@ public class LdapGroupsMapping
         }
 
         LOG.warn("Failed to get groups for user {} (attempt={}/{}). " +
-            "Exception: ", user, retry, numRetries, e);
+            "Exception: ", user, attempt, numAttempts, e);
         LOG.trace("TRACE", e);
       }
 
@@ -570,7 +570,7 @@ public class LdapGroupsMapping
   }
 
   boolean failover(int numAttempts) {
-    if (numAttempts > numRetriesBeforeFailover) {
+    if (numAttempts > numAttemptsBeforeFailover) {
       String previousLdapUrl = currentLdapUrl;
       currentLdapUrl = ldapLookup.next();
       LOG.info("Reached {} attempts on {}, failing over to {}",
@@ -716,11 +716,11 @@ public class LdapGroupsMapping
     ldapCxtFactoryClass = conf.getClass(LDAP_CTX_FACTORY_CLASS_KEY,
         LDAP_CTX_FACTORY_CLASS_DEFAULT, InitialContextFactory.class);
 
-    this.numRetries = conf.getInt(LDAP_NUM_RETRIES_KEY,
-        LDAP_NUM_RETRIES_DEFAULT);
-    this.numRetriesBeforeFailover = conf.getInt(
-        LDAP_NUM_RETRIES_BEFORE_FAILOVER_KEY,
-        LDAP_NUM_RETRIES_BEFORE_FAILOVER_DEFAULT);
+    this.numAttempts = conf.getInt(LDAP_NUM_ATTEMPTS_KEY,
+        LDAP_NUM_ATTEMPTS_DEFAULT);
+    this.numAttemptsBeforeFailover = conf.getInt(
+        LDAP_NUM_ATTEMPTS_BEFORE_FAILOVER_KEY,
+        LDAP_NUM_ATTEMPTS_BEFORE_FAILOVER_DEFAULT);
 
     this.conf = conf;
   }

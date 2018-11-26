@@ -18,7 +18,7 @@
 package org.apache.hadoop.security;
 
 import static org.apache.hadoop.security.LdapGroupsMapping.CONNECTION_TIMEOUT;
-import static org.apache.hadoop.security.LdapGroupsMapping.LDAP_NUM_RETRIES_KEY;
+import static org.apache.hadoop.security.LdapGroupsMapping.LDAP_NUM_ATTEMPTS_KEY;
 import static org.apache.hadoop.security.LdapGroupsMapping.READ_TIMEOUT;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.junit.Assert.assertArrayEquals;
@@ -203,7 +203,7 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
   private void doTestGetGroups(List<String> expectedGroups, int searchTimes)
       throws NamingException {
     Configuration conf = getBaseConf(TEST_LDAP_URL);
-    conf.setInt(LDAP_NUM_RETRIES_KEY, searchTimes);
+    conf.setInt(LDAP_NUM_ATTEMPTS_KEY, searchTimes);
 
     LdapGroupsMapping groupsMapping = getGroupsMapping();
     groupsMapping.setConf(conf);
