@@ -23,7 +23,6 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -261,9 +260,8 @@ public class LdapGroupsMapping
 
   private DirContext ctx;
   private Configuration conf;
-  
-  private List<String> ldapUrls;
-  private Iterator<String> ldapLookup;
+
+  private Iterator<String> ldapUrls;
   private String currentLdapUrl;
 
   private boolean useSsl;
@@ -572,7 +570,7 @@ public class LdapGroupsMapping
   boolean failover(int numAttempts) {
     if (numAttempts > numAttemptsBeforeFailover) {
       String previousLdapUrl = currentLdapUrl;
-      currentLdapUrl = ldapLookup.next();
+      currentLdapUrl = ldapUrls.next();
       LOG.info("Reached {} attempts on {}, failing over to {}",
           numAttempts, previousLdapUrl, currentLdapUrl);
       return true;
@@ -648,11 +646,8 @@ public class LdapGroupsMapping
     if (urls == null || urls.length == 0) {
       throw new RuntimeException("LDAP URL(s) are not configured");
     }
-    ldapUrls = new ArrayList<>();
-    ldapUrls.addAll(Arrays.asList(urls));
-
-    ldapLookup = Iterators.cycle(ldapUrls);
-    currentLdapUrl = ldapLookup.next();
+    ldapUrls = Iterators.cycle(urls);
+    currentLdapUrl = ldapUrls.next();
 
     useSsl = conf.getBoolean(LDAP_USE_SSL_KEY, LDAP_USE_SSL_DEFAULT);
     if (useSsl) {
