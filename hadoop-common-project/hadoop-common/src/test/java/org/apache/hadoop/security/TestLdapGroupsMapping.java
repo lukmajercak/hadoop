@@ -83,7 +83,7 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
 
   private final String userDN = "CN=some_user,DC=test,DC=com";
 
-  private final String TEST_LDAP_URL = "ldap://test";
+  private static final String TEST_LDAP_URL = "ldap://test";
 
   @Before
   public void setupMocks() {

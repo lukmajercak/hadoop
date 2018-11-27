@@ -181,6 +181,10 @@ public class TestLdapGroupsMappingBase {
     return testParentGroups;
   }
 
+  /**
+   * Ldap Context Factory implementation to be used for testing to check
+   * contexts are requested for the expected LDAP server URLs etc.
+   */
   public static class DummyLdapCtxFactory implements InitialContextFactory {
 
     private static DirContext contextToReturn;

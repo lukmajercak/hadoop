@@ -22,6 +22,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Test failover functionality for switching to different
+ * LDAP server URLs upon failures.
+ */
 public class TestLdapGroupsMappingWithFailover
     extends TestLdapGroupsMappingBase {
 
@@ -88,21 +92,22 @@ public class TestLdapGroupsMappingWithFailover
 
     when(getContext().search(anyString(), anyString(), any(Object[].class),
         any(SearchControls.class))).thenAnswer(new Answer<Object>() {
-      @Override
-      public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
-        if (serverAttempts.get() == 0) {
-          // Take the head of the queue and re-queue it to the back
-          String nextLdapUrl = ldapUrls.remove();
-          ldapUrls.add(nextLdapUrl);
+          @Override
+          public Object answer(InvocationOnMock invocationOnMock)
+              throws Throwable {
+            if (serverAttempts.get() == 0) {
+              // Take the head of the queue and re-queue it to the back
+              String nextLdapUrl = ldapUrls.remove();
+              ldapUrls.add(nextLdapUrl);
 
-          DummyLdapCtxFactory.setExpectedLdapUrl(nextLdapUrl);
-          serverAttempts.set(numAttemptsBeforeFailover);
-        } else {
-          serverAttempts.decrementAndGet();
-        }
-        throw new CommunicationException();
-      }
-    });
+              DummyLdapCtxFactory.setExpectedLdapUrl(nextLdapUrl);
+              serverAttempts.set(numAttemptsBeforeFailover);
+            } else {
+              serverAttempts.decrementAndGet();
+            }
+            throw new CommunicationException();
+          }
+        });
 
     LdapGroupsMapping groupsMapping = getGroupsMapping();
     groupsMapping.setConf(conf);

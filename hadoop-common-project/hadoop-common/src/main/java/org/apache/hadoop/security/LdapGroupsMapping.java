@@ -458,7 +458,7 @@ public class LdapGroupsMapping
    * return an empty string array.
    * @throws NamingException if unable to get group names
    */
-   List<String> doGetGroups(String user, int goUpHierarchy)
+  List<String> doGetGroups(String user, int goUpHierarchy)
       throws NamingException {
     DirContext c = getDirContext();
 
