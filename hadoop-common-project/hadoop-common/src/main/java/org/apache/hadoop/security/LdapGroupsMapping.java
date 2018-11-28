@@ -307,24 +307,22 @@ public class LdapGroupsMapping
      * DirContext/connection.
      */
 
-    int attempt = 0;
-    int atemptsBeforeFailover = 0;
-    while (attempt < numAttempts) {
+    // Tracks the number of attempts made using the same LDAP server
+    int atemptsBeforeFailover = 1;
+
+    for (int attempt = 1; attempt <= numAttempts; attempt++,
+        atemptsBeforeFailover++) {
       try {
         return doGetGroups(user, groupHierarchyLevels);
       } catch (NamingException e) {
-        attempt++;
-        atemptsBeforeFailover++;
+        LOG.warn("Failed to get groups for user {} (attempt={}/{}). " +
+            "Exception: ", user, attempt, numAttempts, e);
+        LOG.trace("TRACE", e);
 
         if (failover(atemptsBeforeFailover)) {
           atemptsBeforeFailover = 0;
         }
-
-        LOG.warn("Failed to get groups for user {} (attempt={}/{}). " +
-            "Exception: ", user, attempt, numAttempts, e);
-        LOG.trace("TRACE", e);
       }
-
 
       // Reset ctx so that new DirContext can be created with new connection
       this.ctx = null;
@@ -567,12 +565,18 @@ public class LdapGroupsMapping
     goUpGroupHierarchy(nextLevelGroups, goUpHierarchy - 1, groups);
   }
 
-  boolean failover(int numAttempts) {
-    if (numAttempts > numAttemptsBeforeFailover) {
+  /**
+   * Check whether we should fail over to the next LDAP server.
+   * @param attemptsMadeWithSameLdap current number of attempts made
+   *                                 with using same LDAP instance
+   * @return true if we should fail over to the next LDAP server
+   */
+  boolean failover(int attemptsMadeWithSameLdap) {
+    if (attemptsMadeWithSameLdap >= numAttemptsBeforeFailover) {
       String previousLdapUrl = currentLdapUrl;
       currentLdapUrl = ldapUrls.next();
       LOG.info("Reached {} attempts on {}, failing over to {}",
-          numAttempts, previousLdapUrl, currentLdapUrl);
+          attemptsMadeWithSameLdap, previousLdapUrl, currentLdapUrl);
       return true;
     }
     return false;
