@@ -73,7 +73,7 @@ The cache invalidation is configurable via `hadoop.security.groups.negative-cach
 LDAP Groups Mapping
 --------
 This provider supports LDAP with simple password authentication using JNDI API.
-`hadoop.security.group.mapping.ldap.url` must be set. This refers to the URL of the LDAP server for resolving user groups.
+`hadoop.security.group.mapping.ldap.url` must be set. This refers to the URL of the LDAP server(s) for resolving user groups. It supports configuring multiple LDAP servers via a comma-separated list.
 
 `hadoop.security.group.mapping.ldap.base` configures the search base for the LDAP connection. This is a distinguished name, and will typically be the root of the LDAP directory.
 Get groups for a given username first looks up the user and then looks up the groups for the user result. If the directory setup has different user and group search bases, use `hadoop.security.group.mapping.ldap.userbase` and `hadoop.security.group.mapping.ldap.groupbase` configs.
@@ -114,6 +114,10 @@ To enable this feature, set `hadoop.security.group.mapping.ldap.search.attr.memb
 
 If the LDAP server's certificate is not signed by a well known certificate authority, specify the path to the truststore in `hadoop.security.group.mapping.ldap.ssl.truststore`.
 Similar to keystore, specify the truststore password file in `hadoop.security.group.mapping.ldap.ssl.truststore.password.file`.
+
+### Configuring retries and multiple LDAP servers with failover ###
+
+
 
 Composite Groups Mapping
 --------
