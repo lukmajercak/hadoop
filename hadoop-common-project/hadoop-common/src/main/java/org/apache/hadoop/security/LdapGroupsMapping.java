@@ -315,8 +315,8 @@ public class LdapGroupsMapping
       try {
         return doGetGroups(user, groupHierarchyLevels);
       } catch (NamingException e) {
-        LOG.warn("Failed to get groups for user {} (attempt={}/{}). " +
-            "Exception: ", user, attempt, numAttempts, e);
+        LOG.warn("Failed to get groups for user {} (attempt={}/{}) using {}. " +
+            "Exception: ", user, attempt, numAttempts, currentLdapUrl, e);
         LOG.trace("TRACE", e);
 
         if (failover(atemptsBeforeFailover, numAttemptsBeforeFailover)) {
