@@ -116,8 +116,27 @@ If the LDAP server's certificate is not signed by a well known certificate autho
 Similar to keystore, specify the truststore password file in `hadoop.security.group.mapping.ldap.ssl.truststore.password.file`.
 
 ### Configuring retries and multiple LDAP servers with failover ###
+If there are issues encountered when retrieving information from LDAP servers, the request will be retried. You can configure the number of retries using the following configuration:
 
+```<property>
+     <name>hadoop.security.group.mapping.ldap.num.attempts</name>
+     <value>3</value>
+     <description>
+       This property is the number of attempts to be made for LDAP operations.
+       If this limit is exceeded, LdapGroupsMapping will return an empty
+       group list.
+     </description>
+    </property>
+```
 
+LDAP Groups Mapping also supports configuring multiple LDAP servers and failover if a particular instance is not available or is misbehaving.
+The following configuration shows configuring 3 LDAP servers. Additionally, 2 attempts will be made for each server before failing over to the next one, with 6 attempts overall before failing.
+
+```
+hadoop.security.group.mapping.ldap.url=ldap://server1,ldap://server2,ldap://server3
+hadoop.security.group.mapping.ldap.num.attempts=6
+hadoop.security.group.mapping.ldap.num.attempts.before.failover=2
+```
 
 Composite Groups Mapping
 --------
