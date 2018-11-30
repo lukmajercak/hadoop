@@ -261,7 +261,7 @@ public class LdapGroupsMapping
   private DirContext ctx;
   private Configuration conf;
 
-  private Iterator<String> ldapUrls;
+  protected Iterator<String> ldapUrls;
   private String currentLdapUrl;
 
   private boolean useSsl;
@@ -319,7 +319,7 @@ public class LdapGroupsMapping
             "Exception: ", user, attempt, numAttempts, e);
         LOG.trace("TRACE", e);
 
-        if (failover(atemptsBeforeFailover)) {
+        if (failover(atemptsBeforeFailover, numAttemptsBeforeFailover)) {
           atemptsBeforeFailover = 0;
         }
       }
@@ -569,10 +569,13 @@ public class LdapGroupsMapping
    * Check whether we should fail over to the next LDAP server.
    * @param attemptsMadeWithSameLdap current number of attempts made
    *                                 with using same LDAP instance
+   * @param maxAttemptsBeforeFailover maximum number of attempts
+   *                                  before failing over
    * @return true if we should fail over to the next LDAP server
    */
-  boolean failover(int attemptsMadeWithSameLdap) {
-    if (attemptsMadeWithSameLdap >= numAttemptsBeforeFailover) {
+  protected boolean failover(
+      int attemptsMadeWithSameLdap, int maxAttemptsBeforeFailover) {
+    if (attemptsMadeWithSameLdap >= maxAttemptsBeforeFailover) {
       String previousLdapUrl = currentLdapUrl;
       currentLdapUrl = ldapUrls.next();
       LOG.info("Reached {} attempts on {}, failing over to {}",
