@@ -261,7 +261,7 @@ public class LdapGroupsMapping
   private DirContext ctx;
   private Configuration conf;
 
-  protected Iterator<String> ldapUrls;
+  private Iterator<String> ldapUrls;
   private String currentLdapUrl;
 
   private boolean useSsl;
@@ -725,6 +725,14 @@ public class LdapGroupsMapping
         LDAP_NUM_ATTEMPTS_BEFORE_FAILOVER_DEFAULT);
 
     this.conf = conf;
+  }
+
+  /**
+   * Get URLs of configured LDAP servers.
+   * @return URLs of LDAP servers being used.
+   */
+  public Iterator<String> getLdapUrls() {
+    return ldapUrls;
   }
 
   private void loadSslConf(Configuration sslConf) {
