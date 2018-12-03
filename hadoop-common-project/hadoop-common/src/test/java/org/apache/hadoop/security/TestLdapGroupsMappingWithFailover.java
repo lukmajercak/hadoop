@@ -86,7 +86,7 @@ public class TestLdapGroupsMappingWithFailover
    */
   @Test
   public void testFailover() throws Exception {
-    Queue<String> ldapUrls = new LinkedList<>();
+    final Queue<String> ldapUrls = new LinkedList<>();
     ldapUrls.add("ldap://test");
     ldapUrls.add("ldap://test1");
     ldapUrls.add("ldap://test2");
