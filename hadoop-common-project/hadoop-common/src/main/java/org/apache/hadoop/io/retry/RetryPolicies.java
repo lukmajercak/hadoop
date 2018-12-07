@@ -677,6 +677,7 @@ public class RetryPolicies {
           e instanceof UnknownHostException ||
           e instanceof StandbyException ||
           e instanceof ConnectTimeoutException ||
+          e instanceof SocketException ||
           isWrappedStandbyException(e)) {
         return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
             getFailoverOrRetrySleepTime(failovers));
@@ -688,16 +689,13 @@ public class RetryPolicies {
       } else if (e instanceof InvalidToken) {
         return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
             "Invalid or Cancelled Token");
-      } else if (e instanceof SocketException
-          || (e instanceof IOException && !(e instanceof RemoteException))) {
+      } else if (e instanceof IOException && e instanceof RemoteException) {
         if (isIdempotentOrAtMostOnce) {
-          return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
-              getFailoverOrRetrySleepTime(retries));
-        } else {
           return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
-              "the invoked method is not idempotent, and unable to determine "
-                  + "whether it was invoked");
+              "the invoked method is idempotent or at most once");
         }
+        return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
+            getFailoverOrRetrySleepTime(failovers));
       } else {
           return fallbackPolicy.shouldRetry(e, retries, failovers,
               isIdempotentOrAtMostOnce);
