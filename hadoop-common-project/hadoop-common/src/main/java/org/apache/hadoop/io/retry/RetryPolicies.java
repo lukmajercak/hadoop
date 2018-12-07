@@ -652,7 +652,7 @@ public class RetryPolicies {
       return times == 0 ? 0 : 
         calculateExponentialTime(delayMillis, times, maxDelayBase);
     }
-    
+
     @Override
     public RetryAction shouldRetry(Exception e, int retries,
         int failovers, boolean isIdempotentOrAtMostOnce) throws Exception {
@@ -682,7 +682,7 @@ public class RetryPolicies {
             getFailoverOrRetrySleepTime(failovers));
       } else if (e instanceof RetriableException
           || getWrappedRetriableException(e) != null) {
-        // RetriableException or RetriableException wrapped 
+        // RetriableException or RetriableException wrapped
         return new RetryAction(RetryAction.RetryDecision.RETRY,
               getFailoverOrRetrySleepTime(retries));
       } else if (e instanceof InvalidToken) {
