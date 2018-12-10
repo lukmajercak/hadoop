@@ -266,24 +266,24 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     file.delete();
     conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, ourUrl);
 
-    String bindpassAlias = "bindpassAlias";
-    conf.set(LdapGroupsMapping.BIND_PASSWORD_KEY, bindpassAlias);
-    String storepassAlias = "storepassAlias";
-    conf.set(LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY, storepassAlias);
-
     CredentialProvider provider =
         CredentialProviderFactory.getProviders(conf).get(0);
     char[] bindpass = {'b', 'i', 'n', 'd', 'p', 'a', 's', 's'};
     char[] storepass = {'s', 't', 'o', 'r', 'e', 'p', 'a', 's', 's'};
 
     // ensure that we get nulls when the key isn't there
-    assertNull(provider.getCredentialEntry(bindpassAlias));
-    assertNull(provider.getCredentialEntry(storepassAlias));
+    assertNull(provider.getCredentialEntry(
+        LdapGroupsMapping.BIND_PASSWORD_KEY));
+    assertNull(provider.getCredentialEntry(
+        LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY));
 
     // create new aliases
     try {
-      provider.createCredentialEntry(bindpassAlias, bindpass);
-      provider.createCredentialEntry(storepassAlias, storepass);
+      provider.createCredentialEntry(
+          LdapGroupsMapping.BIND_PASSWORD_KEY, bindpass);
+
+      provider.createCredentialEntry(
+          LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY, storepass);
       provider.flush();
     } catch (Exception e) {
       e.printStackTrace();
@@ -291,20 +291,64 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     }
     // make sure we get back the right key
     assertArrayEquals(bindpass, provider.getCredentialEntry(
-        bindpassAlias).getCredential());
+        LdapGroupsMapping.BIND_PASSWORD_KEY).getCredential());
     assertArrayEquals(storepass, provider.getCredentialEntry(
-        storepassAlias).getCredential());
+        LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY).getCredential());
 
     LdapGroupsMapping mapping = new LdapGroupsMapping();
     Assert.assertEquals("bindpass",
         mapping.getPassword(conf, LdapGroupsMapping.BIND_PASSWORD_KEY, ""));
     Assert.assertEquals("storepass",
         mapping.getPassword(conf, LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY,
-           ""));
+            ""));
     // let's make sure that a password that doesn't exist returns an
     // empty string as currently expected and used to trigger a call to
     // extract password
     Assert.assertEquals("", mapping.getPassword(conf,"invalid-alias", ""));
+  }
+
+  @Test
+  public void testConfGetPasswordUsingAlias() throws Exception {
+    File testDir = GenericTestUtils.getTestDir();
+    Configuration conf = getBaseConf();
+    final Path jksPath = new Path(testDir.toString(), "test.jks");
+    final String ourUrl =
+        JavaKeyStoreProvider.SCHEME_NAME + "://file" + jksPath.toUri();
+
+    File file = new File(testDir, "test.jks");
+    file.delete();
+    conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, ourUrl);
+
+    // Set alias
+    String bindpassAlias = "bindpassAlias";
+    conf.set(LdapGroupsMapping.BIND_PASSWORD_ALIAS_KEY, bindpassAlias);
+
+    CredentialProvider provider =
+        CredentialProviderFactory.getProviders(conf).get(0);
+    char[] bindpass = {'b', 'i', 'n', 'd', 'p', 'a', 's', 's'};
+
+    // Ensure that we get null when the key isn't there
+    assertNull(provider.getCredentialEntry(bindpassAlias));
+
+    // Create credential for the alias
+    try {
+      provider.createCredentialEntry(bindpassAlias, bindpass);
+      provider.flush();
+    } catch (Exception e) {
+      e.printStackTrace();
+      throw e;
+    }
+    // Make sure we get back the right key
+    assertArrayEquals(bindpass, provider.getCredentialEntry(
+        bindpassAlias).getCredential());
+
+    LdapGroupsMapping mapping = new LdapGroupsMapping();
+    Assert.assertEquals("bindpass",
+        mapping.getPassword(conf, bindpassAlias, ""));
+    // let's make sure that a password that doesn't exist returns an
+    // empty string as currently expected and used to trigger a call to
+    // extract password
+    Assert.assertEquals("", mapping.getPassword(conf, "invalid-alias", ""));
   }
 
   /**
