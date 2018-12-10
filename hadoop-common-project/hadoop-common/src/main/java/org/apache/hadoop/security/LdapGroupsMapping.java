@@ -765,10 +765,10 @@ public class LdapGroupsMapping
   }
 
   String getPasswordFromCredentialProviders(
-      Configuration conf, String alias, String defaultPass) {
+      Configuration config, String alias, String defaultPass) {
     String password = defaultPass;
     try {
-      char[] passchars = conf.getPasswordFromCredentialProviders(alias);
+      char[] passchars = config.getPasswordFromCredentialProviders(alias);
       if (passchars != null) {
         password = new String(passchars);
       }
