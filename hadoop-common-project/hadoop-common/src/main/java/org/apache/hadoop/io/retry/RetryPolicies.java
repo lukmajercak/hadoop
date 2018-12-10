@@ -689,10 +689,11 @@ public class RetryPolicies {
       } else if (e instanceof InvalidToken) {
         return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
             "Invalid or Cancelled Token");
-      } else if (e instanceof IOException && e instanceof RemoteException) {
-        if (isIdempotentOrAtMostOnce) {
+      } else if (e instanceof IOException) {
+        if (e instanceof RemoteException && isIdempotentOrAtMostOnce) {
           return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
-              "the invoked method is idempotent or at most once");
+              "Remote exception and the invoked method is idempotent " +
+                  "or at most once.");
         }
         return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
             getFailoverOrRetrySleepTime(failovers));
