@@ -178,7 +178,7 @@ public class TestFailoverProxy {
   }
   
   @Test
-  public void testFailoverOnNetworkExceptionIdempotentOperation()
+  public void testFailoverOnIONonRemoteNonIdempotentOperation()
       throws UnreliableException, IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
@@ -191,6 +191,7 @@ public class TestFailoverProxy {
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
     assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
 
+    // Fail for unreliable exception
     assertEquals("impl2",
         unreliable.succeedsOnceThenFailsReturningStringIdempotent());
     try {
@@ -201,6 +202,23 @@ public class TestFailoverProxy {
       assertEquals("impl2", e.getMessage());
     }
   }
+
+  @Test
+  public void testFailoverOnIONonRemoteIdempotentOperation()
+      throws UnreliableException, IOException {
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    // Should failover for non-remote idempotent IOException
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+  }
   
   /**
    * Test that if an idempotent function is called, and there
@@ -208,7 +226,7 @@ public class TestFailoverProxy {
    * is properly propagated.
    */
   @Test
-  public void testExceptionPropagatedForIdempotentVoid() {
+  public void testFailOnIORemoteIdempotentOperation() {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy
     .create(UnreliableInterface.class,
         newFlipFlopProxyProvider(
@@ -221,6 +239,49 @@ public class TestFailoverProxy {
       fail("did not throw an exception");
     } catch (Exception ignored) {
     }
+  }
+
+  @Test
+  public void testFailoverOnIORemoteNonIdempotentOperation()
+      throws UnreliableException, IOException {
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.REMOTE_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    // Should failover for remote non-idempotent IOException
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
+    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
+  }
+
+  @Test
+  public void testFailoverOnSocketException()
+      throws UnreliableException, IOException {
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.SOCKET_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    // Should failover for non-idempotent SocketException
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
+    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
+
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.SOCKET_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    // Should failover for idempotent SocketException
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
   }
   
   private static class SynchronizedUnreliableImplementation

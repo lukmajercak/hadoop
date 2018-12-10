@@ -18,6 +18,7 @@
 package org.apache.hadoop.io.retry;
 
 import java.io.IOException;
+import java.net.SocketException;
 
 import javax.security.sasl.SaslException;
 
@@ -43,7 +44,8 @@ class UnreliableImplementation implements UnreliableInterface {
     UNRELIABLE_EXCEPTION,
     STANDBY_EXCEPTION,
     IO_EXCEPTION,
-    REMOTE_EXCEPTION
+    REMOTE_EXCEPTION,
+    SOCKET_EXCEPTION
   }
   
   public UnreliableImplementation() {
@@ -195,6 +197,8 @@ class UnreliableImplementation implements UnreliableInterface {
       throw new IOException(message);
     case REMOTE_EXCEPTION:
       throw new RemoteException(IOException.class.getName(), message);
+    case SOCKET_EXCEPTION:
+      throw new SocketException(message);
     default:
       throw new RuntimeException(message);
     }
