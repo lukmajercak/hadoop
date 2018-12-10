@@ -38,8 +38,7 @@ public class TestFailoverProxy {
     
     private int failoversOccurred = 0;
     
-    public FlipFlopProxyProvider(Class<T> iface, T activeImpl,
-        T standbyImpl) {
+    public FlipFlopProxyProvider(Class<T> iface, T activeImpl, T standbyImpl) {
       this.iface = iface;
       this.impl1 = activeImpl;
       this.impl2 = standbyImpl;
@@ -125,9 +124,11 @@ public class TestFailoverProxy {
         new FailOverOnceOnAnyExceptionPolicy());
     
     for (int i = 0; i < 10; i++) {
-      assertEquals("impl1", unreliable.succeedsTenTimesThenFailsReturningString());
+      assertEquals("impl1",
+          unreliable.succeedsTenTimesThenFailsReturningString());
     }
-    assertEquals("impl2", unreliable.succeedsTenTimesThenFailsReturningString());
+    assertEquals("impl2",
+        unreliable.succeedsTenTimesThenFailsReturningString());
   }
   
   @Test
@@ -164,14 +165,15 @@ public class TestFailoverProxy {
     }
     
     unreliable = (UnreliableInterface)RetryProxy
-    .create(UnreliableInterface.class,
-        newFlipFlopProxyProvider(
-            TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
-            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
-        RetryPolicies.failoverOnNetworkException(1));
+        .create(UnreliableInterface.class,
+            newFlipFlopProxyProvider(
+                TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
+                TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+            RetryPolicies.failoverOnNetworkException(1));
     
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
-    // Make sure we fail over since the first implementation threw a StandbyException
+    // Make sure we fail over since the first implementation
+    // threw a StandbyException
     assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
   }
   
