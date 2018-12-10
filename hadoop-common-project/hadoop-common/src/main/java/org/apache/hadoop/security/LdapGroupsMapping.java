@@ -776,7 +776,8 @@ public class LdapGroupsMapping
    * to avoid reading passwords from a configuration file.
    */
   @Deprecated
-  String getPassword(Configuration conf, String alias, String defaultPass) {
+  String getPassword(Configuration conf, String key, String defaultPass) {
+    String alias = conf.get(key, "");
     String password = defaultPass;
     try {
       char[] passchars = conf.getPassword(alias);

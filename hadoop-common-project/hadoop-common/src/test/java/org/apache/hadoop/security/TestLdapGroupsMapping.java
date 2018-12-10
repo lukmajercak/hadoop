@@ -266,24 +266,24 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     file.delete();
     conf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, ourUrl);
 
+    String bindpassAlias = "bindpassAlias";
+    conf.set(LdapGroupsMapping.BIND_PASSWORD_KEY, bindpassAlias);
+    String storepassAlias = "storepassAlias";
+    conf.set(LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY, storepassAlias);
+
     CredentialProvider provider =
         CredentialProviderFactory.getProviders(conf).get(0);
     char[] bindpass = {'b', 'i', 'n', 'd', 'p', 'a', 's', 's'};
     char[] storepass = {'s', 't', 'o', 'r', 'e', 'p', 'a', 's', 's'};
 
     // ensure that we get nulls when the key isn't there
-    assertNull(provider.getCredentialEntry(
-        LdapGroupsMapping.BIND_PASSWORD_KEY));
-    assertNull(provider.getCredentialEntry(
-        LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY));
+    assertNull(provider.getCredentialEntry(bindpassAlias));
+    assertNull(provider.getCredentialEntry(storepassAlias));
 
     // create new aliases
     try {
-      provider.createCredentialEntry(
-          LdapGroupsMapping.BIND_PASSWORD_KEY, bindpass);
-
-      provider.createCredentialEntry(
-          LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY, storepass);
+      provider.createCredentialEntry(bindpassAlias, bindpass);
+      provider.createCredentialEntry(storepassAlias, storepass);
       provider.flush();
     } catch (Exception e) {
       e.printStackTrace();
@@ -291,9 +291,9 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     }
     // make sure we get back the right key
     assertArrayEquals(bindpass, provider.getCredentialEntry(
-        LdapGroupsMapping.BIND_PASSWORD_KEY).getCredential());
+        bindpassAlias).getCredential());
     assertArrayEquals(storepass, provider.getCredentialEntry(
-        LdapGroupsMapping.LDAP_KEYSTORE_PASSWORD_KEY).getCredential());
+        storepassAlias).getCredential());
 
     LdapGroupsMapping mapping = new LdapGroupsMapping();
     Assert.assertEquals("bindpass",

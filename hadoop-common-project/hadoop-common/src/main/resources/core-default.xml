@@ -388,10 +388,10 @@
   <name>hadoop.security.group.mapping.ldap.bind.password</name>
   <value></value>
   <description>
-    The password of the bind user. this property name is used as an
-    alias to get the password from credential providers. If the password can
-    not be found and hadoop.security.credential.clear-text-fallback is true
-    LDAPGroupsMapping uses the value of this property for password.
+    The password of the bind user. This value is used as an alias to get the
+    password from credential providers. If the password can not be found and
+    hadoop.security.credential.clear-text-fallback is true LDAPGroupsMapping
+    uses the value of this property for password.
   </description>
 </property>
 
