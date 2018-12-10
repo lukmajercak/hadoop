@@ -331,13 +331,9 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     assertNull(provider.getCredentialEntry(bindpassAlias));
 
     // Create credential for the alias
-    try {
-      provider.createCredentialEntry(bindpassAlias, bindpass);
-      provider.flush();
-    } catch (Exception e) {
-      e.printStackTrace();
-      throw e;
-    }
+    provider.createCredentialEntry(bindpassAlias, bindpass);
+    provider.flush();
+
     // Make sure we get back the right key
     assertArrayEquals(bindpass, provider.getCredentialEntry(
         bindpassAlias).getCredential());
@@ -345,9 +341,8 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
     LdapGroupsMapping mapping = new LdapGroupsMapping();
     Assert.assertEquals("bindpass",
         mapping.getPassword(conf, bindpassAlias, ""));
-    // let's make sure that a password that doesn't exist returns an
-    // empty string as currently expected and used to trigger a call to
-    // extract password
+
+    // Empty for an invalid alias
     Assert.assertEquals("", mapping.getPassword(conf, "invalid-alias", ""));
   }
 
