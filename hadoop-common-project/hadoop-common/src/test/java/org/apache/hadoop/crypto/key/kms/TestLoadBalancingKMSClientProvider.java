@@ -385,11 +385,11 @@ public class TestLoadBalancingKMSClientProvider {
     } catch (Exception e) {
       assertTrue(e instanceof IOException);
     }
-    verify(kp.getProviders()[0], Mockito.times(1))
+    verify(kp.getProviders()[0], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
-    verify(kp.getProviders()[1], Mockito.times(1))
+    verify(kp.getProviders()[1], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
-    verify(kp.getProviders()[2], Mockito.times(1))
+    verify(kp.getProviders()[2], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
   }
 
@@ -685,9 +685,9 @@ public class TestLoadBalancingKMSClientProvider {
     } catch (Exception e) {
       assertTrue(e.getCause() instanceof AuthenticationException);
     }
-    verify(p1, Mockito.times(1)).createKey(Mockito.eq("test3"),
+    verify(p1, Mockito.atLeastOnce()).createKey(Mockito.eq("test3"),
             Mockito.any(Options.class));
-    verify(p2, Mockito.times(1)).createKey(Mockito.eq("test3"),
+    verify(p2, Mockito.atLeastOnce()).createKey(Mockito.eq("test3"),
             Mockito.any(Options.class));
   }
 
@@ -864,11 +864,11 @@ public class TestLoadBalancingKMSClientProvider {
     } catch (Exception e) {
       assertTrue(e instanceof SocketTimeoutException);
     }
-    verify(kp.getProviders()[0], Mockito.times(1))
+    verify(kp.getProviders()[0], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
-    verify(kp.getProviders()[1], Mockito.times(1))
+    verify(kp.getProviders()[1], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
-    verify(kp.getProviders()[2], Mockito.times(1))
+    verify(kp.getProviders()[2], Mockito.atLeastOnce())
         .createKey(Mockito.eq(keyName), Mockito.any(Options.class));
   }
 
