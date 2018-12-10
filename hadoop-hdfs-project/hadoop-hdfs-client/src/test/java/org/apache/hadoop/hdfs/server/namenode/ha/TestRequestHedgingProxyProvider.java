@@ -69,7 +69,7 @@ public class TestRequestHedgingProxyProvider {
   private String ns;
 
   @BeforeClass
-  public static void setupClass() throws Exception {
+  public static void setupClass() {
     GenericTestUtils.setLogLevel(RequestHedgingProxyProvider.LOG, Level.TRACE);
   }
 
@@ -684,14 +684,14 @@ public class TestRequestHedgingProxyProvider {
       public ClientProtocol createProxy(Configuration conf,
           InetSocketAddress nnAddr, Class<ClientProtocol> xface,
           UserGroupInformation ugi, boolean withRetries,
-          AtomicBoolean fallbackToSimpleAuth) throws IOException {
+          AtomicBoolean fallbackToSimpleAuth) {
         return iterator.next();
       }
 
       @Override
       public ClientProtocol createProxy(Configuration conf,
           InetSocketAddress nnAddr, Class<ClientProtocol> xface,
-          UserGroupInformation ugi, boolean withRetries) throws IOException {
+          UserGroupInformation ugi, boolean withRetries) {
         return iterator.next();
       }
     };
