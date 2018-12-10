@@ -149,7 +149,8 @@ public class LdapGroupsMapping
   public static final String BIND_PASSWORD_FILE_KEY = BIND_PASSWORD_KEY + ".file";
   public static final String BIND_PASSWORD_FILE_DEFAULT = "";
 
-  public static final String BIND_PASSWORD_ALIAS_KEY = BIND_PASSWORD_KEY + ".alias";
+  public static final String BIND_PASSWORD_ALIAS_KEY =
+      BIND_PASSWORD_KEY + ".alias";
   public static final String BIND_PASSWORD_ALIAS_DEFAULT = "";
 
   /*
