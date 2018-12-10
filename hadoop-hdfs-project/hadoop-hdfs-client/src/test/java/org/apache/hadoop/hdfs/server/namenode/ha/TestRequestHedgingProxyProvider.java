@@ -645,8 +645,9 @@ public class TestRequestHedgingProxyProvider {
   public void testIdempotentOperationShouldNotGetStuckInRetries()
       throws Exception {
     ClientProtocol active = Mockito.mock(ClientProtocol.class);
-    Mockito.when(active.getXAttrs(anyString(), anyListOf(XAttr.class))).thenThrow(
-        new RemoteException(IOException.class.getName(), "could not find attr"));
+    Mockito.when(active.getXAttrs(anyString(),
+        anyListOf(XAttr.class))).thenThrow(new RemoteException(
+            IOException.class.getName(), "could not find attr"));
 
     ClientProtocol standby = Mockito.mock(ClientProtocol.class);
     Mockito.when(standby.getXAttrs(anyString(),
