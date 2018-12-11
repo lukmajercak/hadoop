@@ -340,10 +340,11 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
 
     LdapGroupsMapping mapping = new LdapGroupsMapping();
     Assert.assertEquals("bindpass",
-        mapping.getPassword(conf, bindpassAlias, ""));
+        mapping.getPasswordFromCredentialProviders(conf, bindpassAlias, ""));
 
     // Empty for an invalid alias
-    Assert.assertEquals("", mapping.getPassword(conf, "invalid-alias", ""));
+    Assert.assertEquals("", mapping.getPasswordFromCredentialProviders(
+        conf, "invalid-alias", ""));
   }
 
   /**
