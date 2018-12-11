@@ -325,7 +325,7 @@ public class TestLdapGroupsMapping extends TestLdapGroupsMappingBase {
 
     CredentialProvider provider =
         CredentialProviderFactory.getProviders(conf).get(0);
-    char[] bindpass = {'b', 'i', 'n', 'd', 'p', 'a', 's', 's'};
+    char[] bindpass = "bindpass".toCharArray();
 
     // Ensure that we get null when the key isn't there
     assertNull(provider.getCredentialEntry(bindpassAlias));
