@@ -669,7 +669,7 @@ public class LdapGroupsMapping
 
     String alias = conf.get(BIND_PASSWORD_ALIAS_KEY,
         BIND_PASSWORD_ALIAS_DEFAULT);
-    bindPassword = getPassword(conf, alias, "");
+    bindPassword = getPasswordFromCredentialProviders(conf, alias, "");
     if (bindPassword.isEmpty()) {
       bindPassword = getPassword(conf, BIND_PASSWORD_KEY,
           BIND_PASSWORD_DEFAULT);
