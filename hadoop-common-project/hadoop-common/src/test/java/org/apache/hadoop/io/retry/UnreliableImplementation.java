@@ -172,11 +172,11 @@ class UnreliableImplementation implements UnreliableInterface {
   }
   
   @Override
-  public void idempotentVoidFailsIfIdentifierDoesntMatch(String identifier)
+  public void idempotentVoidFailsIfIdentifierDoesntMatch(String givenIdentifier)
       throws UnreliableException, IOException {
-    if (!this.identifier.equals(identifier)) {
+    if (!this.identifier.equals(givenIdentifier)) {
       String message = "expected '" + this.identifier + "' but received '" +
-          identifier + "'";
+          givenIdentifier + "'";
       throwAppropriateException(exceptionToFailWith, message);
     }
   }
