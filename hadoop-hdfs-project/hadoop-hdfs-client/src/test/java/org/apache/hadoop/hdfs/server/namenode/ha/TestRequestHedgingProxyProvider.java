@@ -41,6 +41,7 @@ import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Assert;
@@ -641,38 +642,63 @@ public class TestRequestHedgingProxyProvider {
     Mockito.verify(standby).getStats();
   }
 
+  /**
+   * HDFS-14088, we first make a successful RPC call, so
+   * RequestHedgingInvocationHandler#currentUsedProxy will be assigned to the
+   * delayMock. Then: <br/>
+   * 1. We start a thread which sleep for 1 sec and call
+   * RequestHedgingProxyProvider#performFailover() <br/>
+   * 2. We make an RPC call again, the call will sleep for 2 sec and throw an
+   * exception for test.<br/>
+   * 3. RequestHedgingInvocationHandler#invoke() will catch the exception and
+   * log RequestHedgingInvocationHandler#currentUsedProxy. Before patch, there
+   * will throw NullPointException.
+   * @throws Exception
+   */
   @Test
-  public void testIdempotentOperationShouldNotGetStuckInRetries()
-      throws Exception {
-    ClientProtocol active = Mockito.mock(ClientProtocol.class);
-    Mockito.when(active.getXAttrs(anyString(),
-        anyListOf(XAttr.class))).thenThrow(new RemoteException(
-            IOException.class.getName(), "could not find attr"));
+  public void testHedgingMultiThreads() throws Exception {
+    final AtomicInteger counter = new AtomicInteger(0);
+    final ClientProtocol delayMock = Mockito.mock(ClientProtocol.class);
+    Mockito.when(delayMock.getStats()).thenAnswer(new Answer<long[]>() {
+      @Override
+      public long[] answer(InvocationOnMock invocation) throws Throwable {
+        int flag = counter.incrementAndGet();
+        Thread.sleep(2000);
+        if (flag == 1) {
+          return new long[]{1};
+        } else {
+          throw new IOException("Exception for test.");
+        }
+      }
+    });
+    final ClientProtocol badMock = Mockito.mock(ClientProtocol.class);
+    Mockito.when(badMock.getStats()).thenThrow(new IOException("Bad mock !!"));
+    final RequestHedgingProxyProvider<ClientProtocol> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri, ClientProtocol.class,
+            createFactory(delayMock, badMock));
+    final ClientProtocol delayProxy = provider.getProxy().proxy;
+    long[] stats = delayProxy.getStats();
+    Assert.assertTrue(stats.length == 1);
+    Assert.assertEquals(1, stats[0]);
+    Assert.assertEquals(1, counter.get());
 
-    ClientProtocol standby = Mockito.mock(ClientProtocol.class);
-    Mockito.when(standby.getXAttrs(anyString(),
-        anyListOf(XAttr.class))).thenThrow(new StandbyException("standby"));
-
-    RequestHedgingProxyProvider<ClientProtocol> provider =
-        new RequestHedgingProxyProvider<>(conf, nnUri,
-            ClientProtocol.class, createFactory(active, standby));
-
-    NameNodeProxiesClient.ProxyAndInfo<ClientProtocol> client =
-        NameNodeProxiesClient.createHAProxy(conf, nnUri, ClientProtocol.class,
-            provider);
-
-    try {
-      List<XAttr> xAttrs = new ArrayList<>();
-      xAttrs.add(new XAttr.Builder().setName("xAttr").build());
-      client.getProxy().getXAttrs("path", xAttrs);
-      Assert.fail("Should fail with remote exception!");
-    } catch (RemoteException e) {
-      assertExceptionContains("could not find attr", e);
-    }
-    Mockito.verify(active, Mockito.atMost(1)).getXAttrs(anyString(),
-        anyListOf(XAttr.class));
-    Mockito.verify(standby, Mockito.atMost(1)).getXAttrs(anyString(),
-        anyListOf(XAttr.class));
+    Thread t = new Thread() {
+      @Override
+      public void run() {
+        try {
+          // Fail over between calling delayProxy.getStats() and throw
+          // exception.
+          Thread.sleep(1000);
+          provider.performFailover(delayProxy);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    };
+    t.start();
+    LambdaTestUtils.intercept(IOException.class, "Exception for test.",
+        delayProxy::getStats);
+    t.join();
   }
 
   private HAProxyFactory<ClientProtocol> createFactory(
