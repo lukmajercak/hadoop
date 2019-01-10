@@ -38,15 +38,16 @@ public class TestDefaultRetryPolicy {
   @Rule
   public Timeout timeout = new Timeout(30000);
 
-  /** Verify FAIL < RETRY < FAILOVER_AND_RETRY. */
+  /** Verify RETRY < FAILOVER_AND_RETRY < FAIL. */
   @Test
-  public void testRetryDecisionOrdering() throws Exception {
-    Assert.assertTrue(RetryPolicy.RetryAction.RetryDecision.FAIL.compareTo(
-        RetryPolicy.RetryAction.RetryDecision.RETRY) < 0);
+  public void testRetryDecisionOrdering() {
     Assert.assertTrue(RetryPolicy.RetryAction.RetryDecision.RETRY.compareTo(
         RetryPolicy.RetryAction.RetryDecision.FAILOVER_AND_RETRY) < 0);
-    Assert.assertTrue(RetryPolicy.RetryAction.RetryDecision.FAIL.compareTo(
-        RetryPolicy.RetryAction.RetryDecision.FAILOVER_AND_RETRY) < 0);
+    Assert.assertTrue(
+        RetryPolicy.RetryAction.RetryDecision.FAILOVER_AND_RETRY.compareTo(
+            RetryPolicy.RetryAction.RetryDecision.FAIL) < 0);
+    Assert.assertTrue(RetryPolicy.RetryAction.RetryDecision.RETRY.compareTo(
+        RetryPolicy.RetryAction.RetryDecision.FAIL) < 0);
   }
 
   /**

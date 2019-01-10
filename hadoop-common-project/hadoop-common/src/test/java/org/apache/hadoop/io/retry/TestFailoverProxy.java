@@ -24,7 +24,6 @@ import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.io.retry.UnreliableImplementation.TypeOfExceptionToFailWith;
 import org.apache.hadoop.io.retry.UnreliableInterface.UnreliableException;
-import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.util.ThreadUtil;
 import org.junit.Test;
 
@@ -39,8 +38,7 @@ public class TestFailoverProxy {
     
     private int failoversOccurred = 0;
     
-    public FlipFlopProxyProvider(Class<T> iface, T activeImpl,
-        T standbyImpl) {
+    public FlipFlopProxyProvider(Class<T> iface, T activeImpl, T standbyImpl) {
       this.iface = iface;
       this.impl1 = activeImpl;
       this.impl2 = standbyImpl;
@@ -85,7 +83,7 @@ public class TestFailoverProxy {
   
   private static FlipFlopProxyProvider<UnreliableInterface>
       newFlipFlopProxyProvider() {
-    return new FlipFlopProxyProvider<UnreliableInterface>(
+    return new FlipFlopProxyProvider<>(
         UnreliableInterface.class,
         new UnreliableImplementation("impl1"),
         new UnreliableImplementation("impl2"));
@@ -94,7 +92,7 @@ public class TestFailoverProxy {
   private static FlipFlopProxyProvider<UnreliableInterface>
       newFlipFlopProxyProvider(TypeOfExceptionToFailWith t1,
           TypeOfExceptionToFailWith t2) {
-    return new FlipFlopProxyProvider<UnreliableInterface>(
+    return new FlipFlopProxyProvider<>(
         UnreliableInterface.class,
         new UnreliableImplementation("impl1", t1),
         new UnreliableImplementation("impl2", t2));
@@ -102,7 +100,7 @@ public class TestFailoverProxy {
 
   @Test
   public void testSuccedsOnceThenFailOver() throws UnreliableException,
-      IOException, StandbyException {
+      IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class, newFlipFlopProxyProvider(),
         new FailOverOnceOnAnyExceptionPolicy());
@@ -119,21 +117,22 @@ public class TestFailoverProxy {
   
   @Test
   public void testSucceedsTenTimesThenFailOver() throws UnreliableException,
-      IOException, StandbyException {
+      IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(),
         new FailOverOnceOnAnyExceptionPolicy());
     
     for (int i = 0; i < 10; i++) {
-      assertEquals("impl1", unreliable.succeedsTenTimesThenFailsReturningString());
+      assertEquals("impl1",
+          unreliable.succeedsTenTimesThenFailsReturningString());
     }
-    assertEquals("impl2", unreliable.succeedsTenTimesThenFailsReturningString());
+    assertEquals("impl2",
+        unreliable.succeedsTenTimesThenFailsReturningString());
   }
   
   @Test
-  public void testNeverFailOver() throws UnreliableException,
-      IOException, StandbyException {
+  public void testNeverFailOver() throws UnreliableException, IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(),
@@ -150,7 +149,7 @@ public class TestFailoverProxy {
   
   @Test
   public void testFailoverOnStandbyException()
-      throws UnreliableException, IOException, StandbyException {
+      throws UnreliableException, IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(),
@@ -166,65 +165,174 @@ public class TestFailoverProxy {
     }
     
     unreliable = (UnreliableInterface)RetryProxy
-    .create(UnreliableInterface.class,
-        newFlipFlopProxyProvider(
-            TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
-            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
-        RetryPolicies.failoverOnNetworkException(1));
-    
+        .create(UnreliableInterface.class,
+            newFlipFlopProxyProvider(
+                TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
+                TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+            RetryPolicies.failoverOnNetworkException(1));
+
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
-    // Make sure we fail over since the first implementation threw a StandbyException
+    // Make sure we fail over since the first implementation
+    // threw a StandbyException
     assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
   }
-  
+
   @Test
-  public void testFailoverOnNetworkExceptionIdempotentOperation()
-      throws UnreliableException, IOException, StandbyException {
+  public void testFailoverOnIONonRemoteIdempotentOperation()
+      throws UnreliableException, IOException {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(
             TypeOfExceptionToFailWith.IO_EXCEPTION,
             TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
         RetryPolicies.failoverOnNetworkException(1));
-    
-    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
-    try {
-      unreliable.succeedsOnceThenFailsReturningString();
-      fail("should not have succeeded twice");
-    } catch (IOException e) {
-      // Make sure we *don't* fail over since the first implementation threw an
-      // IOException and this method is not idempotent
-      assertEquals("impl1", e.getMessage());
-    }
-    
-    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningStringIdempotent());
-    // Make sure we fail over since the first implementation threw an
-    // IOException and this method is idempotent.
-    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+
+    // Should failover for non-remote idempotent IOException
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
   }
-  
+
   /**
-   * Test that if a non-idempotent void function is called, and there is an exception,
-   * the exception is properly propagated
+   * Test that if an idempotent function is called, and there
+   * is a remote IOException, we fail fast and the exception
+   * is properly propagated.
    */
   @Test
-  public void testExceptionPropagatedForNonIdempotentVoid() throws Exception {
+  public void testFailOnIORemoteIdempotentOperation() {
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy
     .create(UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.REMOTE_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    try {
+      unreliable.idempotentVoidFailsIfIdentifierDoesntMatch("impl2");
+      fail("did not throw an exception");
+    } catch (Exception ignored) {
+    }
+  }
+
+  /**
+   * Test that the decisions for remote IOExceptions are:
+   *  idempotent: FAIL
+   *  non-idempotent: FAILOVER_AND_RETRY
+   */
+  @Test
+  public void testRemoteIOException()
+      throws UnreliableException, IOException {
+    // 1. Failover and retry for remote non-idempotent IOException
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.REMOTE_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
+    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
+
+    // 2. Fail for remote idempotent IOException
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.REMOTE_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    try {
+      unreliable.succeedsOnceThenFailsReturningStringIdempotent();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
+    }
+  }
+
+  /**
+   * Test that the decisions for non-remote IOExceptions are:
+   *  idempotent: FAILOVER_AND_RETRY
+   *  non-idempotent: FAIL
+   */
+  @Test
+  public void testNonRemoteIOException()
+      throws UnreliableException, IOException {
+    // 1. Fail for non-remote non-idempotent IOException
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
         newFlipFlopProxyProvider(
             TypeOfExceptionToFailWith.IO_EXCEPTION,
             TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
         RetryPolicies.failoverOnNetworkException(1));
 
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
     try {
-      unreliable.nonIdempotentVoidFailsIfIdentifierDoesntMatch("impl2");
-      fail("did not throw an exception");
-    } catch (Exception e) {
+      unreliable.succeedsOnceThenFailsReturningString();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
     }
 
+    // 2. Failover and retry for non-remote idempotent IOException
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+  }
+
+  /**
+   * Test that the decisions for SocketExceptions are:
+   *  idempotent: FAILOVER_AND_RETRY
+   *  non-idempotent: FAIL
+   */
+  @Test
+  public void testSocketException()
+      throws UnreliableException, IOException {
+    // 1. Fail for non-remote non-idempotent SocketException
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.SOCKET_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
+    try {
+      unreliable.succeedsOnceThenFailsReturningString();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
+    }
+
+    // 2. Failover and retry for non-remote idempotent SocketException
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
   }
   
-  private static class SynchronizedUnreliableImplementation extends UnreliableImplementation {
+  private static class SynchronizedUnreliableImplementation
+      extends UnreliableImplementation {
     
     private CountDownLatch methodLatch;
     
@@ -237,7 +345,7 @@ public class TestFailoverProxy {
 
     @Override
     public String failsIfIdentifierDoesntMatch(String identifier)
-        throws UnreliableException, StandbyException, IOException {
+        throws UnreliableException, IOException {
       // Wait until all threads are trying to invoke this method
       methodLatch.countDown();
       try {
@@ -275,14 +383,13 @@ public class TestFailoverProxy {
    */
   @Test
   public void testConcurrentMethodFailures() throws InterruptedException {
-    FlipFlopProxyProvider<UnreliableInterface> proxyProvider
-        = new FlipFlopProxyProvider<UnreliableInterface>(
-        UnreliableInterface.class,
-        new SynchronizedUnreliableImplementation("impl1",
-            TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
-            2),
-        new UnreliableImplementation("impl2",
-            TypeOfExceptionToFailWith.STANDBY_EXCEPTION));
+    FlipFlopProxyProvider<UnreliableInterface> proxyProvider =
+        new FlipFlopProxyProvider<>(
+            UnreliableInterface.class,
+            new SynchronizedUnreliableImplementation("impl1",
+                TypeOfExceptionToFailWith.STANDBY_EXCEPTION, 2),
+            new UnreliableImplementation("impl2",
+                TypeOfExceptionToFailWith.STANDBY_EXCEPTION));
     
     final UnreliableInterface unreliable = (UnreliableInterface)RetryProxy
       .create(UnreliableInterface.class, proxyProvider,
@@ -307,18 +414,16 @@ public class TestFailoverProxy {
    */
   @Test
   public void testFailoverBetweenMultipleStandbys()
-      throws UnreliableException, StandbyException, IOException {
+      throws UnreliableException, IOException {
     
     final long millisToSleep = 10000;
     
     final UnreliableImplementation impl1 = new UnreliableImplementation("impl1",
         TypeOfExceptionToFailWith.STANDBY_EXCEPTION);
-    FlipFlopProxyProvider<UnreliableInterface> proxyProvider
-        = new FlipFlopProxyProvider<UnreliableInterface>(
-        UnreliableInterface.class,
-        impl1,
-        new UnreliableImplementation("impl2",
-            TypeOfExceptionToFailWith.STANDBY_EXCEPTION));
+    FlipFlopProxyProvider<UnreliableInterface> proxyProvider =
+        new FlipFlopProxyProvider<>(UnreliableInterface.class, impl1,
+            new UnreliableImplementation("impl2",
+                TypeOfExceptionToFailWith.STANDBY_EXCEPTION));
     
     final UnreliableInterface unreliable = (UnreliableInterface)RetryProxy
       .create(UnreliableInterface.class, proxyProvider,

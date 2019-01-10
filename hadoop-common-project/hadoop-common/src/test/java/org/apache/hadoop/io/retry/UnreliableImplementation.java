@@ -18,6 +18,7 @@
 package org.apache.hadoop.io.retry;
 
 import java.io.IOException;
+import java.net.SocketException;
 
 import javax.security.sasl.SaslException;
 
@@ -43,7 +44,8 @@ class UnreliableImplementation implements UnreliableInterface {
     UNRELIABLE_EXCEPTION,
     STANDBY_EXCEPTION,
     IO_EXCEPTION,
-    REMOTE_EXCEPTION
+    REMOTE_EXCEPTION,
+    SOCKET_EXCEPTION
   }
   
   public UnreliableImplementation() {
@@ -125,7 +127,7 @@ class UnreliableImplementation implements UnreliableInterface {
 
   @Override
   public String succeedsOnceThenFailsReturningString()
-      throws UnreliableException, IOException, StandbyException {
+      throws UnreliableException, IOException {
     if (succeedsOnceThenFailsCount++ < 1) {
       return identifier;
     } else {
@@ -136,7 +138,7 @@ class UnreliableImplementation implements UnreliableInterface {
 
   @Override
   public String succeedsTenTimesThenFailsReturningString()
-      throws UnreliableException, IOException, StandbyException {
+      throws UnreliableException, IOException {
     if (succeedsTenTimesThenFailsCount++ < 10) {
       return identifier;
     } else {
@@ -147,7 +149,7 @@ class UnreliableImplementation implements UnreliableInterface {
 
   @Override
   public String succeedsOnceThenFailsReturningStringIdempotent()
-      throws UnreliableException, StandbyException, IOException {
+      throws UnreliableException, IOException {
     if (succeedsOnceThenFailsIdempotentCount++ < 1) {
       return identifier;
     } else {
@@ -158,7 +160,7 @@ class UnreliableImplementation implements UnreliableInterface {
 
   @Override
   public String failsIfIdentifierDoesntMatch(String identifier)
-      throws UnreliableException, StandbyException, IOException {
+      throws UnreliableException, IOException {
     if (this.identifier.equals(identifier)) {
       return identifier;
     } else {
@@ -170,13 +172,11 @@ class UnreliableImplementation implements UnreliableInterface {
   }
   
   @Override
-  public void nonIdempotentVoidFailsIfIdentifierDoesntMatch(String identifier)
-      throws UnreliableException, StandbyException, IOException {
-    if (this.identifier.equals(identifier)) {
-      return;
-    } else {
+  public void idempotentVoidFailsIfIdentifierDoesntMatch(String givenIdentifier)
+      throws UnreliableException, IOException {
+    if (!this.identifier.equals(givenIdentifier)) {
       String message = "expected '" + this.identifier + "' but received '" +
-          identifier + "'";
+          givenIdentifier + "'";
       throwAppropriateException(exceptionToFailWith, message);
     }
   }
@@ -187,7 +187,7 @@ class UnreliableImplementation implements UnreliableInterface {
   }
 
   private static void throwAppropriateException(TypeOfExceptionToFailWith eType,
-      String message) throws UnreliableException, StandbyException, IOException {
+      String message) throws UnreliableException, IOException {
     switch (eType) {
     case STANDBY_EXCEPTION:
       throw new StandbyException(message);
@@ -197,6 +197,8 @@ class UnreliableImplementation implements UnreliableInterface {
       throw new IOException(message);
     case REMOTE_EXCEPTION:
       throw new RemoteException(IOException.class.getName(), message);
+    case SOCKET_EXCEPTION:
+      throw new SocketException(message);
     default:
       throw new RuntimeException(message);
     }

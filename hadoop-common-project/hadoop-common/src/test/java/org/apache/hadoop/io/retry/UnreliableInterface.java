@@ -23,7 +23,6 @@ import java.io.IOException;
 import javax.security.sasl.SaslException;
 
 import org.apache.hadoop.ipc.RemoteException;
-import org.apache.hadoop.ipc.StandbyException;
 
 public interface UnreliableInterface {
   
@@ -67,17 +66,18 @@ public interface UnreliableInterface {
   void failsWithSASLExceptionTenTimes() throws SaslException;
 
   public String succeedsOnceThenFailsReturningString()
-      throws UnreliableException, StandbyException, IOException;
+      throws UnreliableException, IOException;
   @Idempotent
   public String succeedsOnceThenFailsReturningStringIdempotent()
-      throws UnreliableException, StandbyException, IOException;
+      throws UnreliableException, IOException;
   public String succeedsTenTimesThenFailsReturningString()
-      throws UnreliableException, StandbyException, IOException;
+      throws UnreliableException, IOException;
   
   @Idempotent
   public String failsIfIdentifierDoesntMatch(String identifier)
-      throws UnreliableException, StandbyException, IOException;
+      throws UnreliableException, IOException;
 
-  void nonIdempotentVoidFailsIfIdentifierDoesntMatch(String identifier)
-      throws UnreliableException, StandbyException, IOException;
+  @Idempotent
+  void idempotentVoidFailsIfIdentifierDoesntMatch(String identifier)
+      throws UnreliableException, IOException;
 }
