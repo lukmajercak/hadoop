@@ -677,7 +677,6 @@ public class RetryPolicies {
           e instanceof UnknownHostException ||
           e instanceof StandbyException ||
           e instanceof ConnectTimeoutException ||
-          e instanceof SocketException ||
           isWrappedStandbyException(e)) {
         return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
             getFailoverOrRetrySleepTime(failovers));
@@ -689,12 +688,31 @@ public class RetryPolicies {
       } else if (e instanceof InvalidToken) {
         return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
             "Invalid or Cancelled Token");
-      } else if (e instanceof IOException) {
-        if (e instanceof RemoteException && isIdempotentOrAtMostOnce) {
+      } else if (e instanceof SocketException) {
+        if (!isIdempotentOrAtMostOnce) {
           return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
-              "Remote exception and the invoked method is idempotent " +
-                  "or at most once.");
+              "Socket exception and the invoked method is not idempotent. " +
+                  "Not safe to retry elsewhere.");
         }
+        return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
+            getFailoverOrRetrySleepTime(failovers));
+      } else if (e instanceof IOException) {
+        if (e instanceof RemoteException) {
+          if (isIdempotentOrAtMostOnce) {
+            return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
+                "Remote exception and the invoked method is idempotent " +
+                    "or at most once.");
+          }
+          return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
+                getFailoverOrRetrySleepTime(failovers));
+        }
+
+        if (!isIdempotentOrAtMostOnce) {
+          return new RetryAction(RetryAction.RetryDecision.FAIL, 0,
+              "IO exception and the invoked method is not idempotent. " +
+                  "Not safe to retry elsewhere.");
+        }
+
         return new RetryAction(RetryAction.RetryDecision.FAILOVER_AND_RETRY,
             getFailoverOrRetrySleepTime(failovers));
       } else {

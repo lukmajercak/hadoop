@@ -176,32 +176,6 @@ public class TestFailoverProxy {
     // threw a StandbyException
     assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
   }
-  
-  @Test
-  public void testFailoverOnIONonRemoteNonIdempotentOperation()
-      throws UnreliableException, IOException {
-    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
-        UnreliableInterface.class,
-        newFlipFlopProxyProvider(
-            TypeOfExceptionToFailWith.IO_EXCEPTION,
-            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
-        RetryPolicies.failoverOnNetworkException(1));
-
-    // Should failover for non-remote non-idempotent IOException
-    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
-    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
-
-    // Fail for unreliable exception
-    assertEquals("impl2",
-        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
-    try {
-      unreliable.succeedsOnceThenFailsReturningStringIdempotent();
-      fail("should not have succeeded twice");
-    } catch (UnreliableException e) {
-      // Make sure there was no failover on normal exception.
-      assertEquals("impl2", e.getMessage());
-    }
-  }
 
   @Test
   public void testFailoverOnIONonRemoteIdempotentOperation()
@@ -241,9 +215,15 @@ public class TestFailoverProxy {
     }
   }
 
+  /**
+   * Test that the decisions for remote IOExceptions are:
+   *  idempotent: FAIL
+   *  non-idempotent: FAILOVER_AND_RETRY
+   */
   @Test
-  public void testFailoverOnIORemoteNonIdempotentOperation()
+  public void testRemoteIOException()
       throws UnreliableException, IOException {
+    // 1. Failover and retry for remote non-idempotent IOException
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(
@@ -251,14 +231,76 @@ public class TestFailoverProxy {
             TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
         RetryPolicies.failoverOnNetworkException(1));
 
-    // Should failover for remote non-idempotent IOException
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
     assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
+
+    // 2. Fail for remote idempotent IOException
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.REMOTE_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    try {
+      unreliable.succeedsOnceThenFailsReturningStringIdempotent();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
+    }
   }
 
+  /**
+   * Test that the decisions for non-remote IOExceptions are:
+   *  idempotent: FAILOVER_AND_RETRY
+   *  non-idempotent: FAIL
+   */
   @Test
-  public void testFailoverOnSocketException()
+  public void testNonRemoteIOException()
       throws UnreliableException, IOException {
+    // 1. Fail for non-remote non-idempotent IOException
+    UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
+    try {
+      unreliable.succeedsOnceThenFailsReturningString();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
+    }
+
+    // 2. Failover and retry for non-remote idempotent IOException
+    unreliable = (UnreliableInterface)RetryProxy.create(
+        UnreliableInterface.class,
+        newFlipFlopProxyProvider(
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
+            TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
+        RetryPolicies.failoverOnNetworkException(1));
+
+    assertEquals("impl1",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+    assertEquals("impl2",
+        unreliable.succeedsOnceThenFailsReturningStringIdempotent());
+  }
+
+  /**
+   * Test that the decisions for SocketExceptions are:
+   *  idempotent: FAILOVER_AND_RETRY
+   *  non-idempotent: FAIL
+   */
+  @Test
+  public void testSocketException()
+      throws UnreliableException, IOException {
+    // 1. Fail for non-remote non-idempotent SocketException
     UnreliableInterface unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(
@@ -266,18 +308,23 @@ public class TestFailoverProxy {
             TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
         RetryPolicies.failoverOnNetworkException(1));
 
-    // Should failover for non-idempotent SocketException
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
-    assertEquals("impl2", unreliable.succeedsOnceThenFailsReturningString());
+    try {
+      unreliable.succeedsOnceThenFailsReturningString();
+      fail("should not have succeeded twice");
+    } catch (IOException e) {
+      // Make sure there was no failover on normal exception.
+      assertEquals("impl1", e.getMessage());
+    }
 
+    // 2. Failover and retry for non-remote idempotent SocketException
     unreliable = (UnreliableInterface)RetryProxy.create(
         UnreliableInterface.class,
         newFlipFlopProxyProvider(
-            TypeOfExceptionToFailWith.SOCKET_EXCEPTION,
+            TypeOfExceptionToFailWith.IO_EXCEPTION,
             TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
         RetryPolicies.failoverOnNetworkException(1));
 
-    // Should failover for idempotent SocketException
     assertEquals("impl1",
         unreliable.succeedsOnceThenFailsReturningStringIdempotent());
     assertEquals("impl2",

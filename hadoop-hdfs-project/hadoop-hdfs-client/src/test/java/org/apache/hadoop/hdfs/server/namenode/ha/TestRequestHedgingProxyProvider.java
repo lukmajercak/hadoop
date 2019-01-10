@@ -701,6 +701,40 @@ public class TestRequestHedgingProxyProvider {
     t.join();
   }
 
+  @Test
+  public void testIdempotentOperationShouldNotGetStuckInRetries()
+      throws Exception {
+    ClientProtocol active = Mockito.mock(ClientProtocol.class);
+    Mockito.when(active.getXAttrs(anyString(),
+        anyListOf(XAttr.class))).thenThrow(new RemoteException(
+            IOException.class.getName(), "could not find attr"));
+
+    ClientProtocol standby = Mockito.mock(ClientProtocol.class);
+    Mockito.when(standby.getXAttrs(anyString(),
+        anyListOf(XAttr.class))).thenThrow(new StandbyException("standby"));
+
+    RequestHedgingProxyProvider<ClientProtocol> provider =
+        new RequestHedgingProxyProvider<>(conf, nnUri,
+            ClientProtocol.class, createFactory(active, standby));
+
+    NameNodeProxiesClient.ProxyAndInfo<ClientProtocol> client =
+        NameNodeProxiesClient.createHAProxy(conf, nnUri, ClientProtocol.class,
+            provider);
+
+    try {
+        List<XAttr> xAttrs = new ArrayList<>();
+        xAttrs.add(new XAttr.Builder().setName("xAttr").build());
+        client.getProxy().getXAttrs("path", xAttrs);
+        Assert.fail("Should fail with remote exception!");
+      } catch (RemoteException e) {
+        assertExceptionContains("could not find attr", e);
+      }
+    Mockito.verify(active, Mockito.atMost(1)).getXAttrs(anyString(),
+        anyListOf(XAttr.class));
+    Mockito.verify(standby, Mockito.atMost(1)).getXAttrs(anyString(),
+        anyListOf(XAttr.class));
+  }
+
   private HAProxyFactory<ClientProtocol> createFactory(
       ClientProtocol... protos) {
     final Iterator<ClientProtocol> iterator =
