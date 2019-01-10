@@ -216,7 +216,7 @@ public class TestFailoverProxy {
   }
 
   /**
-   * Test that the decisions for remote IOExceptions are:
+   * Test that the decisions for remote IOExceptions are as follows.
    *  idempotent: FAIL
    *  non-idempotent: FAILOVER_AND_RETRY
    */
@@ -254,7 +254,7 @@ public class TestFailoverProxy {
   }
 
   /**
-   * Test that the decisions for non-remote IOExceptions are:
+   * Test that the decisions for non-remote IOExceptions are as follows.
    *  idempotent: FAILOVER_AND_RETRY
    *  non-idempotent: FAIL
    */
@@ -293,7 +293,7 @@ public class TestFailoverProxy {
   }
 
   /**
-   * Test that the decisions for SocketExceptions are:
+   * Test that the decisions for SocketExceptions are as follows.
    *  idempotent: FAILOVER_AND_RETRY
    *  non-idempotent: FAIL
    */

@@ -722,13 +722,13 @@ public class TestRequestHedgingProxyProvider {
             provider);
 
     try {
-        List<XAttr> xAttrs = new ArrayList<>();
-        xAttrs.add(new XAttr.Builder().setName("xAttr").build());
-        client.getProxy().getXAttrs("path", xAttrs);
-        Assert.fail("Should fail with remote exception!");
-      } catch (RemoteException e) {
-        assertExceptionContains("could not find attr", e);
-      }
+      List<XAttr> xAttrs = new ArrayList<>();
+      xAttrs.add(new XAttr.Builder().setName("xAttr").build());
+      client.getProxy().getXAttrs("path", xAttrs);
+      Assert.fail("Should fail with remote exception!");
+    } catch (RemoteException e) {
+      assertExceptionContains("could not find attr", e);
+    }
     Mockito.verify(active, Mockito.atMost(1)).getXAttrs(anyString(),
         anyListOf(XAttr.class));
     Mockito.verify(standby, Mockito.atMost(1)).getXAttrs(anyString(),
