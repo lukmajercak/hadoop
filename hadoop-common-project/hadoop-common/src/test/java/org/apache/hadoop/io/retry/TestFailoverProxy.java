@@ -170,7 +170,7 @@ public class TestFailoverProxy {
                 TypeOfExceptionToFailWith.STANDBY_EXCEPTION,
                 TypeOfExceptionToFailWith.UNRELIABLE_EXCEPTION),
             RetryPolicies.failoverOnNetworkException(1));
-    
+
     assertEquals("impl1", unreliable.succeedsOnceThenFailsReturningString());
     // Make sure we fail over since the first implementation
     // threw a StandbyException
@@ -193,7 +193,7 @@ public class TestFailoverProxy {
     assertEquals("impl2",
         unreliable.succeedsOnceThenFailsReturningStringIdempotent());
   }
-  
+
   /**
    * Test that if an idempotent function is called, and there
    * is a remote IOException, we fail fast and the exception
