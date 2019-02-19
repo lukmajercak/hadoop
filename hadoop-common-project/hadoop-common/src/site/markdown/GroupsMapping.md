@@ -93,10 +93,10 @@ This file should be readable only by the Unix user running the daemons.
 
 Multiple bind users
 --------
-If multiple bind users are required, they can be specified through `hadoop.security.group.mapping.ldap.bind.users`. 
-These will represent the aliases of users to be used to bind as when connecting to the LDAP. 
-Each alias will then have to have its distinguished name and password configured. 
-This is useful if the bind user's password has to be reset. 
+If multiple bind users are required, they can be specified through `hadoop.security.group.mapping.ldap.bind.users`.
+These will represent the aliases of users to be used to bind as when connecting to the LDAP.
+Each alias will then have to have its distinguished name and password configured.
+This is useful if the bind user's password has to be reset.
 If AuthenticationException is encountered when connecting to LDAP, LDAPGroupsMapping will switch to the next bind user information and cycle back if necessary.
 
 For example, if:
