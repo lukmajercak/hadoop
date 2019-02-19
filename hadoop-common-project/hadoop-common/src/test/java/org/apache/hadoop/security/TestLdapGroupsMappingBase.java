@@ -69,6 +69,7 @@ public class TestLdapGroupsMappingBase {
 
   @Before
   public void setupMocksBase() throws NamingException {
+    DummyLdapCtxFactory.reset();
     MockitoAnnotations.initMocks(this);
     DirContext ctx = getContext();
 
@@ -209,6 +210,12 @@ public class TestLdapGroupsMappingBase {
 
     public static void setExpectedBindPassword(String bindPassword) {
       expectedBindPassword = bindPassword;
+    }
+
+    public static void reset() {
+      expectedLdapUrl = null;
+      expectedBindUser = null;
+      expectedBindPassword = null;
     }
 
     @Override
