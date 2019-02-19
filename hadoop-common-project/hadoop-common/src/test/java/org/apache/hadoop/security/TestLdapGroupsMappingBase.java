@@ -189,6 +189,8 @@ public class TestLdapGroupsMappingBase {
 
     private static DirContext contextToReturn;
     private static String expectedLdapUrl;
+    private static String expectedBindUser;
+    private static String expectedBindPassword;
 
     public DummyLdapCtxFactory() {
     }
@@ -201,12 +203,29 @@ public class TestLdapGroupsMappingBase {
       expectedLdapUrl = url;
     }
 
+    public static void setExpectedBindUser(String bindUser) {
+      expectedBindUser = bindUser;
+    }
+
+    public static void setExpectedBindPassword(String bindPassword) {
+      expectedBindPassword = bindPassword;
+    }
+
     @Override
     public Context getInitialContext(Hashtable<?, ?> env)
         throws NamingException {
       if (expectedLdapUrl != null) {
         String actualLdapUrl = (String) env.get(Context.PROVIDER_URL);
         assertEquals(expectedLdapUrl, actualLdapUrl);
+      }
+      if (expectedBindUser != null) {
+        String actualBindUser = (String) env.get(Context.SECURITY_PRINCIPAL);
+        assertEquals(expectedBindUser, actualBindUser);
+      }
+      if (expectedBindPassword != null) {
+        String actualBindPassword = (String) env.get(
+            Context.SECURITY_CREDENTIALS);
+        assertEquals(expectedBindPassword, actualBindPassword);
       }
       if (contextToReturn == null) {
         InitialContextFactory defaultFactory = null;
