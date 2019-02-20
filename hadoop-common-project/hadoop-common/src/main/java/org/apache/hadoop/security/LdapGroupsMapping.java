@@ -623,8 +623,8 @@ public class LdapGroupsMapping
     BindUserInfo oldBindUser = this.currentBindUser;
     currentBindUser = this.bindUsers.next();
     if (!oldBindUser.equals(currentBindUser)) {
-      LOG.info("Switched from {} to {} after an AuthenticationException: ",
-          oldBindUser, currentBindUser, e);
+      LOG.info("Switched from {} to {} after an AuthenticationException: {}",
+          oldBindUser, currentBindUser, e.getMessage());
     }
   }
 
