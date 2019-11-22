@@ -1,4 +1,37 @@
-package org.apache.hadoop.security;
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hadoop.security.msgraph;
+
+import static org.apache.hadoop.security.msgraph.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_ATTEMPTS_KEY;
+import static org.apache.hadoop.security.msgraph.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_GROUP_FIELD_EXTRACT_KEY;
+import static org.apache.hadoop.security.msgraph.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_TIMEOUT_MS_KEY;
+import static org.apache.hadoop.security.msgraph.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT;
+import static org.apache.hadoop.security.msgraph.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_USERNAME_FORMAT_KEY;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -11,6 +44,7 @@ import com.microsoft.graph.requests.extensions.IDirectoryObjectCollectionWithRef
 import com.microsoft.graph.requests.extensions.IDirectoryObjectCollectionWithReferencesRequest;
 import com.microsoft.graph.requests.extensions.IDirectoryObjectCollectionWithReferencesRequestBuilder;
 import com.microsoft.graph.requests.extensions.IUserRequestBuilder;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -25,21 +59,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.apache.hadoop.security.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_ATTEMPTS_KEY;
-import static org.apache.hadoop.security.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_GROUP_FIELD_EXTRACT_KEY;
-import static org.apache.hadoop.security.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_TIMEOUT_MS_KEY;
-import static org.apache.hadoop.security.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT;
-import static org.apache.hadoop.security.MicrosoftGraphGroupsMapping.MS_GRAPH_GROUPS_API_USERNAME_FORMAT_KEY;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
+/**
+ * Test the Microsoft Graph Groups Mapping.
+ */
 public class TestMicrosoftGraphGroupsMapping {
 
   private Configuration conf;
@@ -82,10 +105,12 @@ public class TestMicrosoftGraphGroupsMapping {
     groupsMapping.getGroups("bob");
     groupsMapping.getGroups("alice");
 
-    verify(graphClient, atLeastOnce()).users(
-        eq(String.format(MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT, "bob")));
-    verify(graphClient, atLeastOnce()).users(
-        eq(String.format(MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT, "alice")));
+    String bobUserFormatted = String.format(
+        MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT, "bob");
+    String aliceUserFormatted = String.format(
+        MS_GRAPH_GROUPS_API_USERNAME_FORMAT_DEFAULT, "alice");
+    verify(graphClient, atLeastOnce()).users(eq(bobUserFormatted));
+    verify(graphClient, atLeastOnce()).users(eq(aliceUserFormatted));
 
     // 2. Change the format
     conf.set(MS_GRAPH_GROUPS_API_USERNAME_FORMAT_KEY, "format_%s");

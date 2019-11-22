@@ -1,9 +1,36 @@
-package org.apache.hadoop.security.oauth2;
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hadoop.security.msgraph.oauth2;
 
 import com.fasterxml.jackson.core.JsonFactory;
-
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
+
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
@@ -11,14 +38,6 @@ import org.eclipse.jetty.http.MimeTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Utility class for constructing token requests to Azure AD.
@@ -28,10 +47,22 @@ public class AzureADAuthenticator {
   private static final Logger LOG = LoggerFactory.getLogger(
       AzureADAuthenticator.class.getName());
 
+
+  private AzureADAuthenticator() {
+    // Utility class
+  }
+
+  /**
+   * Get a token using the client credentials.
+   * @param authEndpoint Authentication endpoint.
+   * @param clientId Client identifier.
+   * @param clientSecret Client secret.
+   * @param grantType Type of grant.
+   * @param resource Resource to get a token for.
+   */
   public static AzureADToken getTokenUsingClientCreds(
       String authEndpoint, String clientId, String clientSecret,
-      String grantType, String resource)
-      throws IOException {
+      String grantType, String resource) throws IOException {
     QueryParams qp = new QueryParams();
     qp.add("resource", resource);
     qp.add("grant_type", grantType);
@@ -42,6 +73,11 @@ public class AzureADAuthenticator {
     return getToken(authEndpoint, qp.serialize());
   }
 
+  /**
+   * Get a token.
+   * @param authEndpoint Endpoint of the auth service.
+   * @param body Body of the request.
+   */
   private static AzureADToken getToken(String authEndpoint, String body)
       throws IOException {
     AzureADToken token = null;
@@ -59,7 +95,7 @@ public class AzureADAuthenticator {
         token = getTokenImpl(authEndpoint, body);
       } catch (HttpException httpException) {
         lastException = httpException;
-        httperror = httpException.httpErrorCode;
+        httperror = httpException.getHttpErrorCode();
       } catch (IOException e) {
         lastException = e;
       }
@@ -73,7 +109,6 @@ public class AzureADAuthenticator {
 
     return token;
   }
-
 
   private static AzureADToken getTokenImpl(
       String authEndpoint, String payload) throws IOException {
@@ -153,6 +188,10 @@ public class AzureADAuthenticator {
     return new String(bytes.toByteArray(), 0, totalBytesRead);
   }
 
+  /**
+   * Parse a token from an HTTP stream.
+   * @param httpResponseStream HTTP response stream.
+   */
   private static AzureADToken parseTokenFromStream(
       InputStream httpResponseStream) throws IOException {
     AzureADToken token;
@@ -164,7 +203,6 @@ public class AzureADAuthenticator {
       JsonFactory jf = new JsonFactory();
       JsonParser jp = jf.createParser(httpResponseStream);
       jp.nextToken();
-
       for(; jp.hasCurrentToken(); jp.nextToken()) {
         if (jp.getCurrentToken() == JsonToken.FIELD_NAME) {
           String fieldName = jp.getCurrentName();
@@ -189,13 +227,14 @@ public class AzureADAuthenticator {
       }
 
       jp.close();
-      long expiry = System.currentTimeMillis();
-      expiry += expiryPeriod * 1000L;
 
-      token = new AzureADToken(accessToken, new Date(expiry));
+      long expiry = System.currentTimeMillis();
+      expiry += TimeUnit.SECONDS.toMillis(expiryPeriod);
+      Date expiryDate = new Date(expiry);
+      token = new AzureADToken(accessToken, expiryDate);
       LOG.debug("AADToken: fetched token with expiry {}.", token.getExpiry());
     } catch (Exception e) {
-      LOG.warn("AADToken: got exception when parsing json token {}.",
+      LOG.warn("AADToken: got an exception when parsing JSON token {}.",
           e.getMessage());
       throw e;
     } finally {
@@ -203,16 +242,5 @@ public class AzureADAuthenticator {
     }
 
     return token;
-  }
-
-  private static class HttpException extends IOException {
-    int httpErrorCode;
-    String requestId;
-
-    HttpException(int httpErrorCode, String requestId, String message) {
-      super(message);
-      this.httpErrorCode = httpErrorCode;
-      this.requestId = requestId;
-    }
   }
 }
